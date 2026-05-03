@@ -350,9 +350,6 @@ function getToken(cb) {
   tokenClient.requestAccessToken({ prompt: '' });
 }
 
-// Placeholder to keep line references intact
-}
-
 function parseCSV(csv) {
   var lines = csv.split('\n').filter(function(l){return l.trim();});
   if (!lines.length) return [];
