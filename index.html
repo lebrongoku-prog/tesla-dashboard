@@ -1,0 +1,825 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tesla Ladehistorie</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.0/dist/chart.umd.js" integrity="sha384-iU8HYtnGQ8Cy4zl7gbNMOhsDTTKX02BTXptVP/vqAWIaTfM7isw76iyZCsjL2eVi" crossorigin="anonymous"></script>
+<script src="https://accounts.google.com/gsi/client" async></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f1f5f9; color: #1e293b; min-height: 100vh; overflow-x: hidden; }
+  .dashboard { max-width: 1400px; margin: 0 auto; padding: 24px; overflow-x: hidden; }
+  .header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px; flex-wrap: wrap; gap: 16px; }
+  .header-left { display: flex; align-items: center; gap: 12px; }
+  .header-icon { width: 44px; height: 44px; background: linear-gradient(135deg, #3b82f6, #1d4ed8); border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 22px; }
+  .header-title h1 { font-size: 22px; font-weight: 700; color: #1e293b; }
+  .header-title p { font-size: 13px; color: #64748b; margin-top: 2px; }
+  .header-right { display: flex; align-items: center; gap: 12px; }
+  .status-badge { display: flex; align-items: center; gap: 6px; background: #f0fdf4; border: 1px solid #86efac; border-radius: 20px; padding: 6px 14px; font-size: 12px; font-weight: 600; color: #16a34a; }
+  .status-dot { width: 7px; height: 7px; background: #22c55e; border-radius: 50%; animation: pulse 2s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+  .filter-bar { background: white; border-radius: 16px; padding: 16px 20px; margin-bottom: 20px; display: flex; align-items: center; justify-content: space-between; box-shadow: 0 1px 3px rgba(0,0,0,0.08); flex-wrap: wrap; gap: 12px; }
+  .filter-group { display: flex; align-items: center; gap: 8px; }
+  .filter-label { font-size: 13px; color: #64748b; font-weight: 500; margin-right: 4px; }
+  .filter-btn { padding: 7px 16px; border-radius: 8px; border: 1.5px solid #e2e8f0; background: white; color: #64748b; font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.15s; }
+  .filter-btn:hover { border-color: #3b82f6; color: #3b82f6; }
+  .filter-btn.active { background: #3b82f6; border-color: #3b82f6; color: white; }
+  .filter-divider { width: 1px; height: 22px; background: #e2e8f0; margin: 0 4px; flex-shrink: 0; }
+  body.dark .filter-divider { background: #334155; }
+  .nav-group { display: flex; align-items: center; gap: 8px; }
+  .nav-btn { width: 34px; height: 34px; border-radius: 8px; border: 1.5px solid #e2e8f0; background: white; color: #475569; font-size: 16px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.15s; font-weight: 700; }
+  .nav-btn:hover:not(:disabled) { border-color: #3b82f6; color: #3b82f6; }
+  .nav-btn:disabled { opacity: 0.35; cursor: default; }
+  .nav-label { min-width: 160px; text-align: center; font-size: 13px; font-weight: 600; color: #1e293b; padding: 7px 12px; background: #f8fafc; border-radius: 8px; border: 1.5px solid #e2e8f0; }
+  .kpi-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin-bottom: 20px; }
+  @media(max-width:900px){ .kpi-grid{grid-template-columns:repeat(2,minmax(0,1fr));} }
+  .kpi-card { background: white; border-radius: 16px; padding: 18px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); display: flex; align-items: flex-start; gap: 14px; }
+  .kpi-icon { width: 44px; height: 44px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 20px; flex-shrink: 0; }
+  .kpi-icon.blue { background: #eff6ff; }
+  .kpi-icon.green { background: #f0fdf4; }
+  .kpi-icon.purple { background: #faf5ff; }
+  .kpi-icon.orange { background: #fff7ed; }
+  .kpi-info { flex: 1; min-width: 0; }
+  .kpi-label { font-size: 11px; font-weight: 600; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; }
+  .kpi-value { font-size: 20px; font-weight: 700; color: #1e293b; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .kpi-sub { font-size: 12px; color: #64748b; margin-top: 3px; }
+  .charts-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin-bottom: 20px; }
+  .charts-row-4 { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; margin-bottom: 20px; }
+  @media(max-width:1100px){ .charts-row-4{grid-template-columns:repeat(2,minmax(0,1fr));} }
+  @media(max-width:900px){ .charts-row{grid-template-columns:minmax(0,1fr);} .charts-row-4{grid-template-columns:minmax(0,1fr);} }
+  .chart-card { background: white; border-radius: 16px; padding: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+  .chart-header { margin-bottom: 16px; }
+  .chart-title-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .chart-title { font-size: 14px; font-weight: 700; color: #1e293b; }
+  .count-filter-select { font-size: 11px; padding: 3px 8px 3px 6px; border-radius: 6px; border: 1px solid #e2e8f0; background: white; color: #64748b; cursor: pointer; outline: none; appearance: none; -webkit-appearance: none; padding-right: 20px; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%2394a3b8'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 6px center; }
+  .chart-sub { font-size: 12px; color: #94a3b8; margin-top: 3px; }
+  .chart-wrap { position: relative; height: 200px; }
+  .donut-wrap { display: flex; align-items: center; gap: 16px; height: 200px; }
+  .donut-chart-wrap { position: relative; height: 180px; width: 180px; flex-shrink: 0; }
+  .donut-legend { flex: 1; display: flex; flex-direction: column; gap: 6px; overflow-y: auto; max-height: 190px; }
+  .legend-item { display: flex; align-items: center; gap: 8px; font-size: 12px; }
+  .legend-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+  .legend-name { color: #475569; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .legend-val { color: #1e293b; font-weight: 600; white-space: nowrap; }
+  .heatmap-container { width: 100%; }
+  .heatmap-grid { display: flex; flex-direction: column; gap: 3px; width: 100%; }
+  .heatmap-row { display: flex; align-items: center; gap: 3px; width: 100%; }
+  .heatmap-row-label { font-size: 10px; color: #94a3b8; width: 26px; text-align: right; flex-shrink: 0; }
+  .heatmap-hours { display: flex; gap: 3px; flex: 1; min-width: 0; }
+  .heatmap-cell { flex: 1; min-width: 0; height: 18px; border-radius: 3px; background: #e2e8f0; cursor: default; }
+  .heatmap-col-labels { display: flex; gap: 3px; padding-left: 29px; margin-bottom: 2px; width: 100%; box-sizing: border-box; }
+  .heatmap-col-label { flex: 1; min-width: 0; font-size: 8px; color: #94a3b8; text-align: center; }
+  .heatmap-legend-row { display: flex; align-items: center; gap: 6px; margin-top: 8px; justify-content: flex-end; }
+  .heatmap-legend-label { font-size: 10px; color: #94a3b8; }
+  .heatmap-legend-cells { display: flex; gap: 3px; }
+  .heatmap-legend-cell { width: 18px; height: 18px; border-radius: 3px; }
+  .insights-row { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; margin-bottom: 20px; }
+  @media(max-width:900px){ .insights-row{grid-template-columns:repeat(2,minmax(0,1fr));} }
+  .insight-card { background: white; border-radius: 16px; padding: 16px 18px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); border-left: 4px solid #e2e8f0; }
+  .insight-card.blue { border-left-color: #3b82f6; }
+  .insight-card.green { border-left-color: #22c55e; }
+  .insight-card.purple { border-left-color: #a855f7; }
+  .insight-card.orange { border-left-color: #f97316; }
+  .insight-label { font-size: 11px; font-weight: 600; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; }
+  .insight-main { font-size: 17px; font-weight: 700; color: #1e293b; margin-bottom: 4px; }
+  .insight-detail { font-size: 12px; color: #64748b; }
+  .table-card { background: white; border-radius: 16px; padding: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); margin-bottom: 20px; }
+  .table-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+  .table-title { font-size: 14px; font-weight: 700; color: #1e293b; }
+  .table-scroll { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  thead th { text-align: left; font-size: 11px; font-weight: 600; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px; padding: 8px 12px; border-bottom: 1px solid #f1f5f9; }
+  tbody tr { border-bottom: 1px solid #f8fafc; }
+  tbody tr:last-child { border-bottom: none; }
+  tbody tr:hover { background: #f8fafc; }
+  tbody td { padding: 10px 12px; color: #475569; }
+  tbody td:first-child { color: #1e293b; font-weight: 600; }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 6px; font-size: 11px; font-weight: 600; }
+  .badge-blue { background: #eff6ff; color: #3b82f6; }
+  .badge-green { background: #f0fdf4; color: #16a34a; }
+  .badge-orange { background: #fff7ed; color: #ea580c; }
+  .loading-overlay { position: fixed; inset: 0; background: rgba(241,245,249,0.92); display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 100; gap: 16px; }
+  .spinner { width: 44px; height: 44px; border: 4px solid #e2e8f0; border-top-color: #3b82f6; border-radius: 50%; animation: spin 0.8s linear infinite; }
+  @keyframes spin { to{transform:rotate(360deg)} }
+  .loading-text { font-size: 15px; font-weight: 600; color: #475569; }
+  .loading-sub { font-size: 13px; color: #94a3b8; }
+  .signin-overlay { position: fixed; inset: 0; background: #f1f5f9; display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 200; gap: 20px; }
+  .signin-card { background: white; border-radius: 24px; padding: 40px 48px; box-shadow: 0 8px 30px rgba(0,0,0,0.12); text-align: center; max-width: 380px; width: 90%; }
+  .signin-icon { font-size: 48px; margin-bottom: 16px; }
+  .signin-title { font-size: 20px; font-weight: 700; color: #1e293b; margin-bottom: 8px; }
+  .signin-sub { font-size: 14px; color: #64748b; margin-bottom: 28px; line-height: 1.5; }
+  .signin-btn { display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%; padding: 13px 20px; border-radius: 12px; border: 1.5px solid #e2e8f0; background: white; font-size: 15px; font-weight: 600; color: #1e293b; cursor: pointer; transition: all 0.15s; }
+  .signin-btn:hover { border-color: #3b82f6; background: #eff6ff; color: #1d4ed8; }
+  .signin-btn svg { width: 20px; height: 20px; flex-shrink: 0; }
+  .error-card { background: #fff1f2; border: 1px solid #fecdd3; border-radius: 12px; padding: 16px 20px; color: #be123c; font-size: 13px; margin-bottom: 20px; display: none; }
+  .error-card pre { font-size: 11px; margin-top: 8px; white-space: pre-wrap; opacity: 0.8; }
+  .theme-btn { width: 34px; height: 34px; border-radius: 8px; border: 1.5px solid #e2e8f0; background: white; cursor: pointer; font-size: 16px; display: flex; align-items: center; justify-content: center; transition: all 0.15s; flex-shrink: 0; }
+  .theme-btn:hover { border-color: #3b82f6; }
+
+  /* ── Dark mode ── */
+  body.dark { background: #0f172a; color: #e2e8f0; }
+  body.dark .filter-bar { background: #1e293b; box-shadow: 0 1px 3px rgba(0,0,0,0.4); }
+  body.dark .kpi-card { background: #1e293b; box-shadow: 0 1px 3px rgba(0,0,0,0.4); }
+  body.dark .chart-card { background: #1e293b; box-shadow: 0 1px 3px rgba(0,0,0,0.4); }
+  body.dark .insight-card { background: #1e293b; box-shadow: 0 1px 3px rgba(0,0,0,0.4); }
+  body.dark .table-card { background: #1e293b; box-shadow: 0 1px 3px rgba(0,0,0,0.4); }
+  body.dark .filter-btn { background: #1e293b; border-color: #334155; color: #94a3b8; }
+  body.dark .filter-btn:hover { border-color: #3b82f6; color: #3b82f6; }
+  body.dark .filter-btn.active { background: #3b82f6; border-color: #3b82f6; color: white; }
+  body.dark .nav-btn { background: #1e293b; border-color: #334155; color: #94a3b8; }
+  body.dark .nav-btn:hover:not(:disabled) { border-color: #3b82f6; color: #3b82f6; }
+  body.dark .nav-label { background: #0f172a; border-color: #334155; color: #e2e8f0; }
+  body.dark .theme-btn { background: #1e293b; border-color: #334155; }
+  body.dark .header-title h1 { color: #f1f5f9; }
+  body.dark .kpi-value { color: #f1f5f9; }
+  body.dark .kpi-label { color: #64748b; }
+  body.dark .kpi-sub { color: #64748b; }
+  body.dark .chart-title { color: #f1f5f9; }
+  body.dark .chart-sub { color: #64748b; }
+  body.dark .count-filter-select { background-color: #0f172a; border-color: #334155; color: #94a3b8; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%2364748b'/%3E%3C/svg%3E"); }
+  body.dark .insight-main { color: #f1f5f9; }
+  body.dark .insight-label { color: #64748b; }
+  body.dark .insight-detail { color: #64748b; }
+  body.dark .table-title { color: #f1f5f9; }
+  body.dark .legend-val { color: #f1f5f9; }
+  body.dark .legend-name { color: #94a3b8; }
+  body.dark .kpi-icon.blue { background: #1e3a5f; }
+  body.dark .kpi-icon.green { background: #14532d; }
+  body.dark .kpi-icon.purple { background: #2e1065; }
+  body.dark .kpi-icon.orange { background: #431407; }
+  body.dark thead th { color: #64748b; border-bottom-color: #334155; }
+  body.dark tbody tr { border-bottom-color: #334155; }
+  body.dark tbody tr:hover { background: #334155; }
+  body.dark tbody td { color: #94a3b8; }
+  body.dark tbody td:first-child { color: #f1f5f9; }
+  body.dark .badge-blue { background: #1e3a5f; color: #93c5fd; }
+  body.dark .badge-green { background: #14532d; color: #86efac; }
+  body.dark .badge-orange { background: #431407; color: #fb923c; }
+  body.dark .loading-overlay { background: rgba(15,23,42,0.92); }
+  body.dark .loading-text { color: #94a3b8; }
+  body.dark .heatmap-row-label { color: #64748b; }
+  body.dark .heatmap-col-label { color: #64748b; }
+  body.dark .heatmap-legend-label { color: #64748b; }
+</style>
+</head>
+<body>
+<div id="signinOverlay" class="signin-overlay">
+  <div class="signin-card">
+    <div class="signin-icon">⚡</div>
+    <div class="signin-title">Tesla Ladehistorie</div>
+    <div class="signin-sub">Melde dich mit deinem Google-Konto an, um auf deine Ladedaten zuzugreifen.</div>
+    <button class="signin-btn" onclick="signIn()">
+      <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg>
+      Mit Google anmelden
+    </button>
+  </div>
+</div>
+<div id="loadingOverlay" class="loading-overlay" style="display:none">
+  <div class="spinner"></div>
+  <div class="loading-text">Lade Ladedaten…</div>
+  <div class="loading-sub">Google Sheets wird abgefragt</div>
+</div>
+<div class="dashboard">
+  <div class="header">
+    <div class="header-left">
+      <div class="header-icon">⚡</div>
+      <div class="header-title">
+        <h1>Tesla Ladehistorie</h1>
+        <p id="headerSub">Lade Daten…</p>
+      </div>
+    </div>
+    <div class="header-right">
+      <button class="theme-btn" id="themeBtn" onclick="toggleTheme()" title="Hell / Dunkel">🌙</button>
+      <div class="status-badge" id="statusBadge" style="display:none">
+        <div class="status-dot"></div>
+        <span id="statusText">Live</span>
+      </div>
+    </div>
+  </div>
+  <div id="errorCard" class="error-card"></div>
+  <div class="filter-bar">
+    <div class="filter-group">
+      <span class="filter-label">Zeitraum:</span>
+      <button class="filter-btn" data-months="1" onclick="setFilter(1)">1M</button>
+      <button class="filter-btn" data-months="3" onclick="setFilter(3)">3M</button>
+      <button class="filter-btn" data-months="6" onclick="setFilter(6)">6M</button>
+      <button class="filter-btn" data-months="12" onclick="setFilter(12)">1J</button>
+      <button class="filter-btn active" data-months="null" onclick="setFilter(null)">Alle</button>
+      <div class="filter-divider"></div>
+      <button class="filter-btn" data-year="2025" onclick="setFilterYear(2025)">2025</button>
+      <button class="filter-btn" data-year="2026" onclick="setFilterYear(2026)">2026</button>
+    </div>
+    <div class="nav-group">
+      <button class="nav-btn" id="navPrev" onclick="navigate(1)" title="Vorherige Periode">&#8249;</button>
+      <div class="nav-label" id="navLabel">–</div>
+      <button class="nav-btn" id="navNext" onclick="navigate(-1)" title="Nächste Periode">&#8250;</button>
+    </div>
+  </div>
+  <div class="kpi-grid">
+    <div class="kpi-card"><div class="kpi-icon blue">⚡</div><div class="kpi-info"><div class="kpi-label">Ladevorgänge</div><div class="kpi-value" id="kpiCount">–</div><div class="kpi-sub" id="kpiCountSub"></div></div></div>
+    <div class="kpi-card"><div class="kpi-icon green">💰</div><div class="kpi-info"><div class="kpi-label">Gesamtkosten</div><div class="kpi-value" id="kpiCost">–</div><div class="kpi-sub" id="kpiCostSub"></div></div></div>
+    <div class="kpi-card"><div class="kpi-icon green">📊</div><div class="kpi-info"><div class="kpi-label">Ø Preis / kWh</div><div class="kpi-value" id="kpiAvgPrice">–</div><div class="kpi-sub" id="kpiAvgPriceSub"></div></div></div>
+  </div>
+  <div class="charts-row">
+    <div class="chart-card"><div class="chart-header"><div class="chart-title-row"><div class="chart-title">Ladevorgänge pro Monat</div><select id="countFilter" class="count-filter-select" onchange="setCountFilter(this.value)"><option value="">Alle</option></select></div><div class="chart-sub" id="chartCountSub"></div></div><div class="chart-wrap"><canvas id="chartCount"></canvas></div></div>
+    <div class="chart-card"><div class="chart-header"><div class="chart-title">Kosten pro Monat</div><div class="chart-sub" id="chartCostSub"></div></div><div class="chart-wrap"><canvas id="chartCost"></canvas></div></div>
+    <div class="chart-card"><div class="chart-header"><div class="chart-title">Ø Preis pro Monat</div><div class="chart-sub" id="chartPriceSub"></div></div><div class="chart-wrap"><canvas id="chartPrice"></canvas></div></div>
+  </div>
+  <div class="charts-row" style="grid-template-columns:repeat(2,minmax(0,1fr))">
+    <div class="chart-card"><div class="chart-header"><div class="chart-title">Ladevorgänge nach Wochentag</div><div class="chart-sub" id="chartDaySub"></div></div><div class="chart-wrap"><canvas id="chartDay"></canvas></div></div>
+    <div class="chart-card"><div class="chart-header"><div class="chart-title">Kosten nach Standort</div><div class="chart-sub" id="chartLocSub"></div></div><div class="donut-wrap"><div class="donut-chart-wrap"><canvas id="chartLoc"></canvas></div><div class="donut-legend" id="locLegend"></div></div></div>
+  </div>
+  <div class="chart-card" style="margin-bottom:20px">
+    <div class="chart-header"><div class="chart-title">Ladezeiten-Heatmap</div><div class="chart-sub">Wochentag × Stunde</div></div>
+    <div class="heatmap-container" id="heatmapContainer"></div>
+  </div>
+  <div class="table-card">
+    <div class="table-header"><div class="table-title">Letzte Ladevorgänge</div><div style="font-size:12px;color:#94a3b8" id="tableCount"></div></div>
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>Datum</th><th>Standort</th><th>Energie (kWh)</th><th>Kosten (CHF)</th><th>Preis/kWh</th><th>Wochentag</th><th>Startzeit</th></tr></thead>
+        <tbody id="tableBody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+<script>
+const SHEET_ID = '1YC4EyDAhOa-eJod_JU5afc48IRUb5A0kMcgoiWLROnc';
+const CLIENT_ID = '49501547672-sc1ga0lcq200h4iuij33c7n4kf65gpra.apps.googleusercontent.com.apps.googleusercontent.com'; // ← hier eintragen
+let accessToken = null;
+let tokenExpiry = 0;
+let tokenClient = null;
+let allData = [];
+let filterMonths = null;
+let filterYear = null;
+let navOffset = 0;
+let filterCount = null;
+let charts = {};
+
+const topLabelPlugin = {
+  id: 'topLabel',
+  afterDatasetsDraw(chart) {
+    const { ctx } = chart;
+    chart.data.datasets.forEach((ds, i) => {
+      const meta = chart.getDatasetMeta(i);
+      if (meta.type !== 'bar' || ds.topLabel === false) return;
+      meta.data.forEach((bar, j) => {
+        const val = ds.data[j];
+        if (!val) return;
+        ctx.save();
+        ctx.font = '10px -apple-system,sans-serif';
+        ctx.fillStyle = '#64748b';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'bottom';
+        ctx.fillText(ds.topLabelFmt ? ds.topLabelFmt(val, j) : val, bar.x, bar.y - 3);
+        ctx.restore();
+      });
+    });
+  }
+};
+Chart.register(topLabelPlugin);
+
+function chf(n, decimals) {
+  if (decimals === undefined) decimals = 2;
+  if (isNaN(n)) return '–';
+  return n.toLocaleString('de-CH', {minimumFractionDigits: decimals, maximumFractionDigits: decimals});
+}
+function fmtNum(n, decimals) {
+  if (decimals === undefined) decimals = 1;
+  if (isNaN(n)) return '–';
+  return n.toLocaleString('de-CH', {minimumFractionDigits: decimals, maximumFractionDigits: decimals});
+}
+function monthKey(d) { return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0'); }
+function fmtMonth(d) { return d.toLocaleDateString('de-CH', { month: 'short', year: '2-digit' }); }
+function fmtDate(d) { return d.toLocaleDateString('de-CH', { day: '2-digit', month: '2-digit', year: 'numeric' }); }
+function fmtDuration(mins) {
+  if (!mins || mins <= 0) return '–';
+  var h = Math.floor(mins / 60);
+  var m = Math.round(mins % 60);
+  if (h > 0) return h + ' Std ' + (m > 0 ? m + ' Min' : '');
+  return m + ' Min';
+}
+function fmtDurationShort(mins) {
+  if (!mins || mins <= 0) return '–';
+  var h = Math.floor(mins / 60);
+  var m = Math.round(mins % 60);
+  if (h > 0) return h + 'h ' + String(m).padStart(2,'0') + 'min';
+  return m + ' min';
+}
+
+var WEEKDAYS = ['Mo','Di','Mi','Do','Fr','Sa','So'];
+var WEEKDAYS_LONG = ['Montag','Dienstag','Mittwoch','Donnerstag','Freitag','Samstag','Sonntag'];
+var COLORS = ['#3b82f6','#22c55e','#a855f7','#f97316','#06b6d4','#ef4444','#eab308','#ec4899','#14b8a6','#8b5cf6'];
+
+function simplifyLoc(loc) { return (loc || 'Unbekannt').split(',')[0].trim(); }
+
+// Google Auth
+function initGoogleAuth() {
+  if (typeof google === 'undefined' || !google.accounts) {
+    setTimeout(initGoogleAuth, 200);
+    return;
+  }
+  tokenClient = google.accounts.oauth2.initTokenClient({
+    client_id: CLIENT_ID,
+    scope: 'https://www.googleapis.com/auth/spreadsheets.readonly',
+    callback: function(resp) {
+      if (resp.error) { showAuthError('Anmeldung fehlgeschlagen: ' + resp.error); return; }
+      accessToken = resp.access_token;
+      tokenExpiry = Date.now() + (resp.expires_in - 60) * 1000;
+      try { sessionStorage.setItem('g_token', accessToken); sessionStorage.setItem('g_expiry', tokenExpiry); } catch(_) {}
+      document.getElementById('signinOverlay').style.display = 'none';
+      document.getElementById('loadingOverlay').style.display = 'flex';
+      loadData();
+    }
+  });
+  // Restore session token if still valid
+  try {
+    var t = sessionStorage.getItem('g_token'), exp = parseInt(sessionStorage.getItem('g_expiry') || '0');
+    if (t && Date.now() < exp) { accessToken = t; tokenExpiry = exp; document.getElementById('signinOverlay').style.display = 'none'; document.getElementById('loadingOverlay').style.display = 'flex'; loadData(); return; }
+  } catch(_) {}
+}
+function signIn() { if (tokenClient) tokenClient.requestAccessToken({ prompt: '' }); }
+function showAuthError(msg) {
+  document.getElementById('signinOverlay').style.display = 'none';
+  var c = document.getElementById('errorCard'); c.style.display = 'block';
+  c.innerHTML = '<strong>⚠️ ' + msg + '</strong>';
+}
+function getToken(cb) {
+  if (accessToken && Date.now() < tokenExpiry) { cb(accessToken); return; }
+  tokenClient.requestAccessToken({ prompt: '' });
+}
+
+// Placeholder to keep line references intact
+}
+
+function parseCSV(csv) {
+  var lines = csv.split('\n').filter(function(l){return l.trim();});
+  if (!lines.length) return [];
+  var headers = parseCSVLine(lines[0]);
+  return lines.slice(1).map(function(l) {
+    var vals = parseCSVLine(l);
+    var obj = {};
+    headers.forEach(function(h,i){ obj[h.trim()] = (vals[i]||'').trim(); });
+    return obj;
+  }).filter(function(r){return Object.keys(r).length > 1;});
+}
+
+function parseCSVLine(line) {
+  var result = [], cur = '', inQ = false;
+  for (var i = 0; i < line.length; i++) {
+    var ch = line[i];
+    if (ch === '"') {
+      if (inQ && line[i+1] === '"') { cur += '"'; i++; } else inQ = !inQ;
+    } else if (ch === ',' && !inQ) { result.push(cur); cur = ''; }
+    else { cur += ch; }
+  }
+  result.push(cur);
+  return result;
+}
+
+function parseRows(rows) {
+  return rows.map(function(r) {
+    var date = new Date(r.ChargeStartDateTime);
+    if (!date || isNaN(date)) return null;
+    var kwh   = parseFloat(r.QuantityBase) || 0;
+    var price = parseFloat(r.UnitCostBase) || 0;
+    var total = parseFloat(r['Total Inc. VAT']) || 0;
+    var loc   = simplifyLoc(r.SiteLocationName || 'Unbekannt');
+    var dayIdx = (date.getDay() + 6) % 7;
+    var hour  = date.getHours();
+    return { date: date, year: date.getFullYear(), monthKey: monthKey(date), monthLabel: fmtMonth(date), loc: loc, kwh: kwh, price: price, total: total, dayIdx: dayIdx, hour: hour };
+  }).filter(Boolean);
+}
+
+function getDateRange() {
+  if (!allData.length) return { start: null, end: null };
+  if (filterMonths === null) return { start: null, end: null };
+  var dates = allData.map(function(r){return r.date;});
+  var maxDate = new Date(Math.max.apply(null, dates));
+  var endYear = maxDate.getFullYear();
+  var endMonth = maxDate.getMonth();
+  // navOffset steps 1 month at a time regardless of filterMonths
+  endMonth -= navOffset;
+  while (endMonth < 0) { endMonth += 12; endYear--; }
+  while (endMonth > 11) { endMonth -= 12; endYear++; }
+  var end = new Date(endYear, endMonth + 1, 0, 23, 59, 59);
+  var startYear = endYear, startMonth = endMonth - filterMonths + 1;
+  while (startMonth < 0) { startMonth += 12; startYear--; }
+  var start = new Date(startYear, startMonth, 1);
+  return { start: start, end: end };
+}
+
+function getFilteredData() {
+  if (filterYear !== null) return allData.filter(function(r){ return r.year === filterYear; });
+  if (filterMonths === null) return allData;
+  var range = getDateRange();
+  if (!range.start || !range.end) return allData;
+  return allData.filter(function(r){ return r.date >= range.start && r.date <= range.end; });
+}
+
+function getMaxNavOffset() {
+  if (filterMonths === null || !allData.length) return 0;
+  var dates = allData.map(function(r){return r.date;});
+  var maxDate = new Date(Math.max.apply(null, dates));
+  var minDate = new Date(Math.min.apply(null, dates));
+  var totalMonths = (maxDate.getFullYear() - minDate.getFullYear()) * 12 + (maxDate.getMonth() - minDate.getMonth());
+  // Max offset = total span minus the window size (so window never goes before first data)
+  return Math.max(0, totalMonths - filterMonths + 1);
+}
+
+function getNavLabel() {
+  if (filterYear !== null) return String(filterYear);
+  if (filterMonths === null) {
+    if (!allData.length) return 'Alle Daten';
+    var dates = allData.map(function(r){return r.date;});
+    var min = new Date(Math.min.apply(null, dates));
+    var max = new Date(Math.max.apply(null, dates));
+    return fmtDate(min) + ' – ' + fmtDate(max);
+  }
+  var range = getDateRange();
+  if (!range.start || !range.end) return '–';
+  if (filterMonths === 1) return range.end.toLocaleDateString('de-CH', { month: 'long', year: 'numeric' });
+  return range.start.toLocaleDateString('de-CH', {month:'short', year:'numeric'}) + ' – ' + range.end.toLocaleDateString('de-CH', {month:'short', year:'numeric'});
+}
+
+function setFilter(months) {
+  filterMonths = months;
+  filterYear = null;
+  navOffset = 0;
+  document.querySelectorAll('.filter-btn').forEach(function(b){
+    b.classList.toggle('active', b.dataset.months == (months === null ? 'null' : months));
+  });
+  updateNav();
+  renderAll();
+}
+
+function setFilterYear(year) {
+  filterYear = year;
+  filterMonths = null;
+  navOffset = 0;
+  document.querySelectorAll('.filter-btn').forEach(function(b){
+    b.classList.toggle('active', b.dataset.year == year);
+  });
+  updateNav();
+  renderAll();
+}
+
+function setCountFilter(val) {
+  filterCount = val === '' ? null : parseInt(val);
+  var data = getFilteredData();
+  if (!data.length) return;
+  renderCountChart(data);
+  renderCostChart(data);
+  renderPriceChart(data);
+}
+
+function navigate(dir) {
+  navOffset += dir;
+  var maxOff = getMaxNavOffset();
+  if (navOffset < 0) navOffset = 0;
+  if (navOffset > maxOff) navOffset = maxOff;
+  updateNav();
+  renderAll();
+}
+
+function updateNav() {
+  document.getElementById('navLabel').textContent = getNavLabel();
+  var maxOff = getMaxNavOffset();
+  var yearMode = filterYear !== null;
+  document.getElementById('navPrev').disabled = (yearMode || filterMonths === null || navOffset >= maxOff);
+  document.getElementById('navNext').disabled = (yearMode || filterMonths === null || navOffset <= 0);
+}
+
+function destroyChart(id) {
+  if (charts[id]) { charts[id].destroy(); delete charts[id]; }
+}
+
+function aggregateMonthly(data) {
+  var map = {};
+  data.forEach(function(r) {
+    if (!map[r.monthKey]) map[r.monthKey] = { label: r.monthLabel, kwh: 0, cost: 0, count: 0 };
+    map[r.monthKey].kwh += r.kwh;
+    map[r.monthKey].cost += r.total;
+    map[r.monthKey].count++;
+  });
+  return Object.entries(map).sort(function(a,b){return a[0].localeCompare(b[0]);}).map(function(e){ return Object.assign({key:e[0]},e[1]); });
+}
+
+function renderAll() {
+  var data = getFilteredData();
+  if (!data.length) return;
+  renderKPIs(data);
+  renderCostChart(data);
+  renderCountChart(data);
+  renderPriceChart(data);
+  renderLocChart(data);
+  renderDayChart(data);
+  renderHeatmap(data);
+  renderTable(data);
+}
+
+function renderKPIs(data) {
+  var count = data.length;
+  var totalKwh = data.reduce(function(s,r){return s+r.kwh;}, 0);
+  var totalCost = data.reduce(function(s,r){return s+r.total;}, 0);
+  var avgPrice = totalKwh > 0 ? totalCost / totalKwh : 0;
+  var locCount = {};
+  data.forEach(function(r){ locCount[r.loc] = (locCount[r.loc]||0) + 1; });
+  var topLoc = Object.entries(locCount).sort(function(a,b){return b[1]-a[1];})[0];
+  var sorted = data.slice().sort(function(a,b){return b.date-a.date;});
+  var last = sorted[0];
+  var monthly = aggregateMonthly(data);
+  var avgPerMonth = monthly.length > 0 ? count / monthly.length : count;
+  document.getElementById('kpiCount').textContent = count.toLocaleString('de-CH');
+  document.getElementById('kpiCountSub').textContent = 'Ø ' + fmtNum(avgPerMonth, 1) + ' / Monat';
+  document.getElementById('kpiCost').textContent = 'CHF ' + chf(totalCost, 0);
+  document.getElementById('kpiCostSub').textContent = 'Ø CHF ' + chf(totalCost/count) + ' / Ladung';
+  document.getElementById('kpiAvgPrice').textContent = 'CHF ' + chf(avgPrice, 2);
+  document.getElementById('kpiAvgPriceSub').textContent = 'Gesamtdurchschnitt';
+}
+
+function renderEnergyChart(data) {
+  destroyChart('energy');
+  var dark = document.body.classList.contains('dark');
+  var gridCol = dark ? '#334155' : '#f1f5f9';
+  var monthly = aggregateMonthly(data);
+  var labels = monthly.map(function(m){return m.label;});
+  var vals = monthly.map(function(m){return parseFloat(m.kwh.toFixed(1));});
+  var avg = vals.length ? parseFloat((vals.reduce(function(s,v){return s+v;},0)/vals.length).toFixed(1)) : 0;
+  var avgLine = vals.map(function(){return avg;});
+  document.getElementById('chartEnergySub').textContent = monthly.length + ' Monate · Ø ' + fmtNum(avg,1) + ' kWh';
+  var ctx = document.getElementById('chartEnergy').getContext('2d');
+  charts.energy = new Chart(ctx, {
+    type: 'bar',
+    data: { labels: labels, datasets: [
+      { type: 'bar', data: vals, backgroundColor: '#3b82f620', borderColor: '#3b82f6', borderWidth: 2, borderRadius: 6, topLabel: true, topLabelFmt: function(v){ return v > 0 ? fmtNum(v,0) : ''; }, order: 2 },
+      { type: 'line', data: avgLine, borderColor: '#f97316', borderWidth: 2, borderDash: [5,4], pointRadius: 0, fill: false, tension: 0, topLabel: false, label: 'Durchschnitt', order: 1 }
+    ]},
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { callbacks: { label: function(c){ return c.datasetIndex===0 ? ' ' + fmtNum(c.raw,1) + ' kWh' : ' Ø ' + fmtNum(c.raw,1) + ' kWh'; } } } }, scales: { x: { grid: { display: false }, ticks: { font: { size: 10 }, color: '#94a3b8' } }, y: { grid: { color: gridCol }, ticks: { font: { size: 10 }, color: '#94a3b8' }, beginAtZero: true } } }
+  });
+}
+
+function renderCountChart(data) {
+  destroyChart('count');
+  var dark = document.body.classList.contains('dark');
+  var gridCol = dark ? '#334155' : '#f1f5f9';
+  var monthly = aggregateMonthly(data);
+  var labels = monthly.map(function(m){return m.label;});
+  var vals = monthly.map(function(m){return m.count;});
+  var avg = vals.length ? parseFloat((vals.reduce(function(s,v){return s+v;},0)/vals.length).toFixed(1)) : 0;
+  var avgLine = vals.map(function(){return avg;});
+  // Populate dropdown
+  var sel = document.getElementById('countFilter');
+  var allCounts = Array.from(new Set(vals)).sort(function(a,b){return a-b;});
+  var currentVal = filterCount !== null ? String(filterCount) : '';
+  sel.innerHTML = '<option value="">Alle</option>';
+  allCounts.forEach(function(c){ sel.innerHTML += '<option value="'+c+'"'+(String(c)===currentVal?' selected':'')+'>'+c+'×</option>'; });
+  // Highlight colors
+  var highlight = monthly.map(function(m){ return filterCount === null || m.count === filterCount; });
+  var bgColors = monthly.map(function(m,i){ return highlight[i] ? '#06b6d430' : (dark ? 'rgba(100,116,139,0.08)' : 'rgba(148,163,184,0.1)'); });
+  var bdColors = monthly.map(function(m,i){ return highlight[i] ? '#06b6d4' : (dark ? '#334155' : '#cbd5e1'); });
+  document.getElementById('chartCountSub').textContent = monthly.length + ' Monate · Ø ' + fmtNum(avg,1) + ' / Monat' + (filterCount !== null ? ' · Filter: ' + filterCount + '×' : '');
+  var ctx = document.getElementById('chartCount').getContext('2d');
+  charts.count = new Chart(ctx, {
+    type: 'bar',
+    data: { labels: labels, datasets: [
+      { type: 'bar', data: vals, backgroundColor: bgColors, borderColor: bdColors, borderWidth: 1, borderRadius: 6, topLabel: true, topLabelFmt: function(v, j){ return (filterCount === null || highlight[j]) && v > 0 ? v : ''; }, order: 2 },
+      { type: 'line', data: avgLine, borderColor: '#f97316', borderWidth: 2, borderDash: [5,4], pointRadius: 0, fill: false, tension: 0, topLabel: false, order: 1 }
+    ]},
+    options: { responsive: true, maintainAspectRatio: false,
+      layout: { padding: { top: 22 } },
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: function(c){ return c.datasetIndex===0 ? ' ' + c.raw + ' Ladevorgänge' : ' Ø ' + fmtNum(c.raw,1) + ' / Monat'; } } } },
+      scales: { x: { grid: { display: false }, ticks: { font: { size: 10 }, color: '#94a3b8' } },
+        y: { grid: { color: gridCol }, ticks: { font: { size: 10 }, color: '#94a3b8', stepSize: 1, precision: 0, callback: function(v){ return Number.isInteger(v) ? v : null; } }, beginAtZero: true } } }
+  });
+}
+
+function renderCostChart(data) {
+  destroyChart('cost');
+  var dark = document.body.classList.contains('dark');
+  var gridCol = dark ? '#334155' : '#f1f5f9';
+  var monthly = aggregateMonthly(data);
+  var labels = monthly.map(function(m){return m.label;});
+  var vals = monthly.map(function(m){return parseFloat(m.cost.toFixed(2));});
+  var avg = vals.length ? parseFloat((vals.reduce(function(s,v){return s+v;},0)/vals.length).toFixed(2)) : 0;
+  var avgLine = vals.map(function(){return avg;});
+  var highlight = monthly.map(function(m){ return filterCount === null || m.count === filterCount; });
+  var bgColors = monthly.map(function(m,i){ return highlight[i] ? '#22c55e30' : (dark ? 'rgba(100,116,139,0.08)' : 'rgba(148,163,184,0.1)'); });
+  var bdColors = monthly.map(function(m,i){ return highlight[i] ? '#22c55e' : (dark ? '#334155' : '#cbd5e1'); });
+  document.getElementById('chartCostSub').textContent = monthly.length + ' Monate · Ø CHF ' + chf(avg,2) + (filterCount !== null ? ' · Filter: ' + filterCount + '×' : '');
+  var ctx = document.getElementById('chartCost').getContext('2d');
+  charts.cost = new Chart(ctx, {
+    type: 'bar',
+    data: { labels: labels, datasets: [
+      { type: 'bar', data: vals, backgroundColor: bgColors, borderColor: bdColors, borderWidth: 1, borderRadius: 6, topLabel: true, topLabelFmt: function(v, j){ return (filterCount === null || highlight[j]) && v > 0 ? chf(v,0) : ''; }, order: 2 },
+      { type: 'line', data: avgLine, borderColor: '#f97316', borderWidth: 2, borderDash: [5,4], pointRadius: 0, fill: false, tension: 0, topLabel: false, label: 'Durchschnitt', order: 1 }
+    ]},
+    options: { responsive: true, maintainAspectRatio: false, layout: { padding: { top: 22 } }, plugins: { legend: { display: false }, tooltip: { callbacks: { label: function(c){ return c.datasetIndex===0 ? ' CHF ' + chf(c.raw) : ' Ø CHF ' + chf(c.raw); } } } }, scales: { x: { grid: { display: false }, ticks: { font: { size: 10 }, color: '#94a3b8' } }, y: { grid: { color: gridCol }, ticks: { font: { size: 10 }, color: '#94a3b8' }, beginAtZero: true } } }
+  });
+}
+
+function renderPriceChart(data) {
+  destroyChart('price');
+  var dark = document.body.classList.contains('dark');
+  var gridCol = dark ? '#334155' : '#f1f5f9';
+  var monthly = aggregateMonthly(data);
+  var labels = monthly.map(function(m){return m.label;});
+  var vals = monthly.map(function(m){ return m.kwh > 0 ? parseFloat((m.cost/m.kwh).toFixed(3)) : 0; });
+  var nonZero = vals.filter(function(v){return v>0;});
+  var avg = nonZero.length ? parseFloat((nonZero.reduce(function(s,v){return s+v;},0)/nonZero.length).toFixed(3)) : 0;
+  var avgLine = vals.map(function(){return avg;});
+  var highlight = monthly.map(function(m){ return filterCount === null || m.count === filterCount; });
+  var ptColors = monthly.map(function(m,i){ return highlight[i] ? '#a855f7' : (dark ? '#334155' : '#cbd5e1'); });
+  var ptRadii = monthly.map(function(m,i){ return highlight[i] ? 5 : 2; });
+  var ptHover = monthly.map(function(m,i){ return highlight[i] ? 7 : 3; });
+  document.getElementById('chartPriceSub').textContent = 'Ø ' + chf(avg,2) + ' CHF/kWh im Zeitraum' + (filterCount !== null ? ' · Filter: ' + filterCount + '×' : '');
+  var ctx = document.getElementById('chartPrice').getContext('2d');
+  charts.price = new Chart(ctx, {
+    type: 'line',
+    data: { labels: labels, datasets: [
+      { data: vals, borderColor: filterCount !== null ? 'rgba(168,85,247,0.25)' : '#a855f7', backgroundColor: '#a855f715', borderWidth: 2.5, fill: true, tension: 0.4, pointBackgroundColor: ptColors, pointRadius: ptRadii, pointHoverRadius: ptHover, order: 2 },
+      { data: avgLine, borderColor: '#f97316', borderWidth: 2, borderDash: [5,4], pointRadius: 0, fill: false, tension: 0, order: 1 }
+    ]},
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { callbacks: { label: function(c){ return c.datasetIndex===0 ? ' CHF ' + chf(c.raw,3) + ' / kWh' : ' Ø CHF ' + chf(c.raw,3) + ' / kWh'; } } } }, scales: { x: { grid: { display: false }, ticks: { font: { size: 10 }, color: '#94a3b8' } }, y: { grid: { color: gridCol }, ticks: { font: { size: 10 }, color: '#94a3b8' }, beginAtZero: false } } }
+  });
+}
+
+function renderLocChart(data) {
+  destroyChart('loc');
+  var locCost = {};
+  data.forEach(function(r){ locCost[r.loc] = (locCost[r.loc]||0) + r.total; });
+  var entries = Object.entries(locCost).sort(function(a,b){return b[1]-a[1];});
+  var labels = entries.map(function(e){return e[0];});
+  var vals = entries.map(function(e){return parseFloat(e[1].toFixed(2));});
+  var total = vals.reduce(function(s,v){return s+v;}, 0);
+  document.getElementById('chartLocSub').textContent = entries.length + ' Standorte';
+  var ctx = document.getElementById('chartLoc').getContext('2d');
+  charts.loc = new Chart(ctx, {
+    type: 'doughnut',
+    data: { labels: labels, datasets: [{ data: vals, backgroundColor: COLORS.slice(0, labels.length), borderWidth: 2, borderColor: 'white' }] },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { callbacks: { label: function(c){ return ' CHF ' + chf(c.raw) + ' (' + Math.round(c.raw/total*100) + '%)'; } } } }, cutout: '65%' }
+  });
+  var legend = document.getElementById('locLegend');
+  legend.innerHTML = entries.slice(0,8).map(function(e, i) {
+    return '<div class="legend-item"><div class="legend-dot" style="background:' + COLORS[i%COLORS.length] + '"></div><span class="legend-name" title="' + e[0] + '">' + e[0] + '</span><span class="legend-val">CHF ' + chf(e[1], 0) + '</span></div>';
+  }).join('');
+}
+
+function renderDayChart(data) {
+  destroyChart('day');
+  var dark = document.body.classList.contains('dark');
+  var gridCol = dark ? '#334155' : '#f1f5f9';
+  var dayCounts = [0,0,0,0,0,0,0];
+  data.forEach(function(r){ dayCounts[r.dayIdx]++; });
+  var maxVal = Math.max.apply(null, dayCounts);
+  document.getElementById('chartDaySub').textContent = data.length + ' Ladevorgänge';
+  var ctx = document.getElementById('chartDay').getContext('2d');
+  charts.day = new Chart(ctx, {
+    type: 'bar',
+    data: { labels: WEEKDAYS, datasets: [{ data: dayCounts, backgroundColor: dayCounts.map(function(v){ return v === maxVal ? '#3b82f6' : '#3b82f640'; }), borderColor: '#3b82f6', borderWidth: 1, borderRadius: 6, topLabel: true, topLabelFmt: function(v){ return v > 0 ? v : ''; } }] },
+    options: { responsive: true, maintainAspectRatio: false, layout: { padding: { top: 22 } }, plugins: { legend: { display: false }, tooltip: { callbacks: { label: function(c){ return ' ' + c.raw + ' Ladevorgänge'; } } } }, scales: { x: { grid: { display: false }, ticks: { font: { size: 11 }, color: '#64748b' } }, y: { grid: { color: gridCol }, ticks: { font: { size: 10 }, color: '#94a3b8', stepSize: 1, precision: 0, callback: function(v){ return Number.isInteger(v) ? v : null; } }, beginAtZero: true } } }
+  });
+}
+
+function renderHeatmap(data) {
+  var dark = document.body.classList.contains('dark');
+  var grid = Array.from({length:7}, function(){ return new Array(24).fill(0); });
+  data.forEach(function(r){ grid[r.dayIdx][r.hour]++; });
+  var maxVal = Math.max.apply(null, [].concat.apply([], grid));
+  if (maxVal === 0) maxVal = 1;
+  function cellColor(v) {
+    if (v === 0) return dark ? '#334155' : '#e2e8f0';
+    var t = Math.pow(v / maxVal, 0.6);
+    var r = Math.round(239 - t*180);
+    var g = Math.round(246 - t*140);
+    var b = Math.round(255 - t*60);
+    return 'rgb(' + r + ',' + g + ',' + b + ')';
+  }
+  var colLabels = '<div class="heatmap-col-labels">';
+  for (var h = 0; h < 24; h++) { colLabels += '<div class="heatmap-col-label">' + (h%3===0 ? h : '') + '</div>'; }
+  colLabels += '</div>';
+  var rows = '';
+  for (var d = 0; d < 7; d++) {
+    rows += '<div class="heatmap-row"><div class="heatmap-row-label">' + WEEKDAYS[d] + '</div><div class="heatmap-hours">';
+    for (var hh = 0; hh < 24; hh++) {
+      var v = grid[d][hh];
+      rows += '<div class="heatmap-cell" style="background:' + cellColor(v) + '" title="' + WEEKDAYS_LONG[d] + ', ' + hh + ':00 Uhr: ' + v + ' Ladung' + (v!==1?'en':'') + '"></div>';
+    }
+    rows += '</div></div>';
+  }
+  var legendCells = [0, 0.25, 0.5, 0.75, 1].map(function(t){
+    var v = Math.round(t * maxVal);
+    return '<div class="heatmap-legend-cell" style="background:' + cellColor(v) + '"></div>';
+  }).join('');
+  document.getElementById('heatmapContainer').innerHTML = '<div class="heatmap-grid">' + colLabels + rows + '</div><div class="heatmap-legend-row"><span class="heatmap-legend-label">wenig</span><div class="heatmap-legend-cells">' + legendCells + '</div><span class="heatmap-legend-label">viel</span></div>';
+}
+
+function renderInsights(data) {
+  var monthly = aggregateMonthly(data);
+  var effMonths = monthly.filter(function(m){return m.cost > 0;}).map(function(m){return Object.assign({}, m, {eff: m.kwh/m.cost});});
+  var bestEff = effMonths.sort(function(a,b){return b.eff-a.eff;})[0];
+  if (bestEff) {
+    document.getElementById('ins1Main').textContent = bestEff.label;
+    document.getElementById('ins1Detail').textContent = fmtNum(bestEff.eff,2) + ' kWh / CHF · ' + fmtNum(bestEff.kwh,1) + ' kWh total';
+  }
+  var locStats = {};
+  data.forEach(function(r){ if (!locStats[r.loc]) locStats[r.loc] = {kwh:0,cost:0,count:0}; locStats[r.loc].kwh += r.kwh; locStats[r.loc].cost += r.total; locStats[r.loc].count++; });
+  var cheapLoc = Object.entries(locStats).filter(function(e){return e[1].kwh>0 && e[1].count>=2;}).map(function(e){return {name:e[0], avg:e[1].cost/e[1].kwh, count:e[1].count};}).sort(function(a,b){return a.avg-b.avg;})[0];
+  if (cheapLoc) {
+    document.getElementById('ins2Main').textContent = cheapLoc.name;
+    document.getElementById('ins2Detail').textContent = 'CHF ' + chf(cheapLoc.avg,3) + ' / kWh · ' + cheapLoc.count + '× geladen';
+  }
+  var hourCounts = new Array(24).fill(0);
+  data.forEach(function(r){ hourCounts[r.hour]++; });
+  var maxH = Math.max.apply(null, hourCounts);
+  var topHour = hourCounts.indexOf(maxH);
+  document.getElementById('ins3Main').textContent = topHour + ':00 – ' + (topHour+1) + ':00 Uhr';
+  document.getElementById('ins3Detail').textContent = hourCounts[topHour] + ' Ladevorgänge in dieser Stunde';
+  var biggest = data.slice().sort(function(a,b){return b.kwh-a.kwh;})[0];
+  if (biggest) {
+    document.getElementById('ins4Main').textContent = fmtNum(biggest.kwh,1) + ' kWh';
+    document.getElementById('ins4Detail').textContent = fmtDate(biggest.date) + ' · ' + biggest.loc + ' · CHF ' + chf(biggest.total);
+  }
+}
+
+function renderTable(data) {
+  var showAll = (filterMonths === 1 || filterMonths === 3);
+  var sorted = data.slice().sort(function(a,b){return b.date-a.date;});
+  if (!showAll) sorted = sorted.slice(0,15);
+  document.getElementById('tableCount').textContent = showAll
+    ? data.length + ' Einträge'
+    : data.length + ' Einträge total, letzte 15 angezeigt';
+  var body = document.getElementById('tableBody');
+  body.innerHTML = sorted.map(function(r) {
+    var avgP = r.kwh > 0 ? r.total/r.kwh : 0;
+    var dayClass = r.dayIdx < 5 ? 'blue' : 'orange';
+    var timeStr = r.date.toLocaleTimeString('de-CH', {hour:'2-digit', minute:'2-digit'});
+    return '<tr><td>' + fmtDate(r.date) + '</td><td><span class="badge badge-green">' + r.loc + '</span></td><td>' + fmtNum(r.kwh,2) + '</td><td>CHF ' + chf(r.total) + '</td><td>CHF ' + chf(avgP,2) + '</td><td><span class="badge badge-' + dayClass + '">' + WEEKDAYS_LONG[r.dayIdx] + '</span></td><td>' + timeStr + '</td></tr>';
+  }).join('');
+}
+
+async function loadData() {
+  try {
+    // 1. Fetch first sheet name
+    var metaResp = await fetch(
+      'https://sheets.googleapis.com/v4/spreadsheets/' + SHEET_ID + '?fields=sheets.properties.title',
+      { headers: { 'Authorization': 'Bearer ' + accessToken } }
+    );
+    if (metaResp.status === 401) { accessToken = null; document.getElementById('loadingOverlay').style.display = 'none'; document.getElementById('signinOverlay').style.display = 'flex'; return; }
+    if (!metaResp.ok) throw new Error('Sheets API Fehler ' + metaResp.status + ': ' + await metaResp.text());
+    var meta = await metaResp.json();
+    var sheetName = meta.sheets[0].properties.title;
+    // 2. Fetch values
+    var dataResp = await fetch(
+      'https://sheets.googleapis.com/v4/spreadsheets/' + SHEET_ID + '/values/' + encodeURIComponent(sheetName),
+      { headers: { 'Authorization': 'Bearer ' + accessToken } }
+    );
+    if (!dataResp.ok) throw new Error('Werte-Abruf fehlgeschlagen: ' + dataResp.status);
+    var json = await dataResp.json();
+    if (!json.values || json.values.length < 2) throw new Error('Keine Daten im Sheet gefunden.');
+    var headers = json.values[0];
+    var rows = json.values.slice(1).map(function(row) {
+      var obj = {};
+      headers.forEach(function(h, i) { obj[h.trim()] = (row[i] || '').trim(); });
+      return obj;
+    }).filter(function(r) { return Object.keys(r).length > 1; });
+    allData = parseRows(rows);
+    if (!allData.length) throw new Error('Keine gültigen Einträge gefunden. Zeilen im Sheet: ' + rows.length);
+    var dates = allData.map(function(r){return r.date;});
+    var minD = new Date(Math.min.apply(null, dates));
+    var maxD = new Date(Math.max.apply(null, dates));
+    document.getElementById('headerSub').textContent = allData.length + ' Ladevorgänge · ' + fmtDate(minD) + ' – ' + fmtDate(maxD);
+    document.getElementById('statusBadge').style.display = 'flex';
+    document.getElementById('statusText').textContent = allData.length + ' Einträge';
+    updateNav();
+    renderAll();
+    document.getElementById('loadingOverlay').style.display = 'none';
+  } catch(err) {
+    document.getElementById('loadingOverlay').style.display = 'none';
+    var card = document.getElementById('errorCard');
+    card.style.display = 'block';
+    card.innerHTML = '<strong>⚠️ Fehler beim Laden der Daten</strong><pre>' + err.message + '</pre>';
+  }
+}
+
+function toggleTheme() {
+  var dark = document.body.classList.toggle('dark');
+  document.getElementById('themeBtn').textContent = dark ? '☀️' : '🌙';
+  try { localStorage.setItem('tesla-dash-theme', dark ? 'dark' : 'light'); } catch(_) {}
+  if (allData.length) renderAll();
+}
+
+// Restore saved theme preference
+try {
+  if (localStorage.getItem('tesla-dash-theme') === 'dark') {
+    document.body.classList.add('dark');
+    document.getElementById('themeBtn').textContent = '☀️';
+  }
+} catch(_) {}
+
+// Start Google Auth on page load
+initGoogleAuth();
+</script>
+</body>
+</html>
