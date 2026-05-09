@@ -124,6 +124,13 @@
   .error-card pre { font-size: 11px; margin-top: 8px; white-space: pre-wrap; opacity: 0.8; }
   .theme-btn { width: 34px; height: 34px; border-radius: 8px; border: 1.5px solid #e2e8f0; background: white; cursor: pointer; font-size: 16px; display: flex; align-items: center; justify-content: center; transition: all 0.15s; flex-shrink: 0; }
   .theme-btn:hover { border-color: #3b82f6; }
+  .odometer-wrap { display: flex; align-items: center; gap: 5px; }
+  .odometer-label { font-size: 11px; font-weight: 600; color: #94a3b8; white-space: nowrap; }
+  .odometer-input { width: 88px; height: 34px; border-radius: 8px; border: 1.5px solid #e2e8f0; background: white; color: #1e293b; font-size: 12px; font-weight: 600; padding: 0 8px; outline: none; text-align: right; }
+  .odometer-input::placeholder { color: #94a3b8; font-weight: 400; }
+  .odometer-input:focus { border-color: #3b82f6; }
+  body.dark .odometer-input { background: #1e293b; border-color: #334155; color: #f1f5f9; }
+  body.dark .odometer-label { color: #64748b; }
   .refresh-btn { width: 34px; height: 34px; border-radius: 8px; border: 1.5px solid #e2e8f0; background: white; cursor: pointer; font-size: 16px; display: flex; align-items: center; justify-content: center; transition: all 0.15s; flex-shrink: 0; }
   .refresh-btn:hover:not(:disabled) { border-color: #3b82f6; }
   .refresh-btn:disabled { opacity: 0.6; cursor: default; }
@@ -210,6 +217,10 @@
       </div>
     </div>
     <div class="header-right">
+      <div class="odometer-wrap">
+        <span class="odometer-label">Km-Stand</span>
+        <input type="number" id="odometerInput" class="odometer-input" placeholder="z.B. 12500" onchange="saveOdometer()" />
+      </div>
       <button class="refresh-btn" id="refreshBtn" onclick="triggerRefresh()" title="Daten aktualisieren">🔄</button>
       <button class="theme-btn" id="themeBtn" onclick="toggleTheme()" title="Hell / Dunkel">🌙</button>
       <div class="status-badge" id="statusBadge" style="display:none">
@@ -552,10 +563,16 @@ function renderKPIs(data) {
   var last = sorted[0];
   var monthly = aggregateMonthly(data);
   var avgPerMonth = monthly.length > 0 ? count / monthly.length : count;
+  var odometer = 0;
+  try { odometer = parseInt(localStorage.getItem('tesla-odometer') || '0') || 0; } catch(_) {}
+  var totalCountAll = allData.length;
+  var totalCostAll = allData.reduce(function(s,r){return s+r.total;}, 0);
+  var kmSub = odometer > 0 ? ' · Ø ' + Math.round(odometer / totalCountAll).toLocaleString('de-CH') + ' km / Ladung' : '';
+  var chfKmSub = odometer > 0 ? ' · Ø CHF ' + chf(totalCostAll / odometer, 2) + ' / km' : '';
   document.getElementById('kpiCount').textContent = count.toLocaleString('de-CH');
-  document.getElementById('kpiCountSub').textContent = 'Ø ' + fmtNum(avgPerMonth, 1) + ' / Monat';
+  document.getElementById('kpiCountSub').textContent = 'Ø ' + fmtNum(avgPerMonth, 1) + ' / Monat' + kmSub;
   document.getElementById('kpiCost').textContent = 'CHF ' + chf(totalCost, 0);
-  document.getElementById('kpiCostSub').textContent = 'Ø CHF ' + chf(totalCost/count) + ' / Ladung';
+  document.getElementById('kpiCostSub').textContent = 'Ø CHF ' + chf(totalCost/count) + ' / Ladung' + chfKmSub;
   document.getElementById('kpiAvgPrice').textContent = 'CHF ' + chf(avgPrice, 2);
   document.getElementById('kpiAvgPriceSub').textContent = 'Gesamtdurchschnitt';
 }
@@ -828,6 +845,12 @@ async function loadData() {
   }
 }
 
+function saveOdometer() {
+  var val = document.getElementById('odometerInput').value;
+  try { localStorage.setItem('tesla-odometer', val); } catch(_) {}
+  if (allData.length) renderKPIs(getFilteredData());
+}
+
 const REFRESH_URL = 'https://script.google.com/macros/s/AKfycbzplDQKzviFvZkT-mb8xChF-9AN3Eu15mMC-et_JSFyhRHPCEw-2F7oYgW0ehwQGvJzJw/exec?refresh=true&token=leo2024tesla';
 
 async function triggerRefresh() {
@@ -861,6 +884,12 @@ function toggleTheme() {
   try { localStorage.setItem('tesla-dash-theme', dark ? 'dark' : 'light'); } catch(_) {}
   if (allData.length) renderAll();
 }
+
+// Restore saved odometer
+try {
+  var savedOdo = localStorage.getItem('tesla-odometer');
+  if (savedOdo) document.getElementById('odometerInput').value = savedOdo;
+} catch(_) {}
 
 // Restore saved theme preference
 try {
