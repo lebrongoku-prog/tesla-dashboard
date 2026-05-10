@@ -233,6 +233,7 @@
   <div class="filter-bar">
     <div class="filter-group">
       <span class="filter-label">Zeitraum:</span>
+      <button class="filter-btn" data-months="1" onclick="setFilter(1)">1M</button>
       <button class="filter-btn" data-months="3" onclick="setFilter(3)">3M</button>
       <button class="filter-btn" data-months="6" onclick="setFilter(6)">6M</button>
       <button class="filter-btn" data-months="12" onclick="setFilter(12)">1J</button>
@@ -601,6 +602,70 @@ function renderCountChart(data) {
   destroyChart('count');
   var dark = document.body.classList.contains('dark');
   var gridCol = dark ? '#334155' : '#f1f5f9';
+  // Clean up any existing calendar overlay and restore canvas
+  var existingCal = document.getElementById('countCalendar');
+  if (existingCal) existingCal.remove();
+  var canvas = document.getElementById('chartCount');
+  canvas.style.display = '';
+  if (filterMonths === 1) {
+    canvas.style.display = 'none';
+    // Determine which month to show
+    var range = getDateRange();
+    var monthDate = range.start || (data.length ? data[0].date : new Date());
+    var year = monthDate.getFullYear();
+    var month = monthDate.getMonth();
+    // Build dayMap
+    var dayMap = {};
+    data.forEach(function(r){ var d = r.date.getDate(); dayMap[d] = (dayMap[d]||0)+1; });
+    var chargedDays = Object.keys(dayMap).length;
+    document.getElementById('chartCountSub').textContent = data.length + ' Ladevorgänge · ' + chargedDays + ' Tage';
+    document.getElementById('countFilter').innerHTML = '<option value="">Alle</option>';
+    // Calendar geometry
+    var firstDay = new Date(year, month, 1).getDay();
+    var startOffset = (firstDay + 6) % 7; // Mon = 0
+    var daysInMonth = new Date(year, month + 1, 0).getDate();
+    var dayNames = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
+    // Build calendar div
+    var calDiv = document.createElement('div');
+    calDiv.id = 'countCalendar';
+    calDiv.style.cssText = 'position:absolute;top:0;left:0;right:0;bottom:0;display:flex;flex-direction:column;gap:2px;';
+    // Header row
+    var headerRow = document.createElement('div');
+    headerRow.style.cssText = 'display:grid;grid-template-columns:repeat(7,1fr);gap:2px;flex-shrink:0;';
+    dayNames.forEach(function(dn) {
+      var c = document.createElement('div');
+      c.textContent = dn;
+      c.style.cssText = 'text-align:center;font-size:9px;font-weight:600;color:#94a3b8;padding:1px 0;';
+      headerRow.appendChild(c);
+    });
+    calDiv.appendChild(headerRow);
+    // Day grid
+    var gridDiv = document.createElement('div');
+    gridDiv.style.cssText = 'display:grid;grid-template-columns:repeat(7,1fr);grid-auto-rows:1fr;gap:2px;flex:1;min-height:0;';
+    for (var i = 0; i < startOffset; i++) { gridDiv.appendChild(document.createElement('div')); }
+    for (var d = 1; d <= daysInMonth; d++) {
+      var count = dayMap[d] || 0;
+      var charged = count > 0;
+      var cell = document.createElement('div');
+      cell.style.cssText = 'display:flex;flex-direction:column;align-items:center;justify-content:center;border-radius:5px;' +
+        (charged ? 'background:' + (dark ? '#0891b2' : '#06b6d4') + ';' : 'background:' + (dark ? 'rgba(255,255,255,0.04)' : '#f1f5f9') + ';');
+      if (charged) cell.title = count + (count === 1 ? ' Ladevorgang' : ' Ladevorgänge');
+      var numSpan = document.createElement('span');
+      numSpan.textContent = d;
+      numSpan.style.cssText = 'font-size:10px;line-height:1;font-weight:' + (charged ? '700' : '400') + ';color:' + (charged ? '#fff' : (dark ? '#475569' : '#94a3b8')) + ';';
+      cell.appendChild(numSpan);
+      if (count > 1) {
+        var badge = document.createElement('span');
+        badge.textContent = count + '×';
+        badge.style.cssText = 'font-size:8px;line-height:1;color:rgba(255,255,255,0.8);margin-top:1px;';
+        cell.appendChild(badge);
+      }
+      gridDiv.appendChild(cell);
+    }
+    calDiv.appendChild(gridDiv);
+    canvas.parentNode.appendChild(calDiv);
+    return;
+  }
   var monthly = aggregateMonthly(data);
   var labels = monthly.map(function(m){return m.label;});
   var vals = monthly.map(function(m){return m.count;});
@@ -636,6 +701,31 @@ function renderCostChart(data) {
   destroyChart('cost');
   var dark = document.body.classList.contains('dark');
   var gridCol = dark ? '#334155' : '#f1f5f9';
+  if (filterMonths === 1) {
+    var sessions = data.slice().sort(function(a,b){ return a.date - b.date; });
+    var labels = sessions.map(function(r){ return r.date.getDate()+'.'; });
+    var vals = sessions.map(function(r){ return parseFloat(r.total.toFixed(2)); });
+    var avg = vals.length ? parseFloat((vals.reduce(function(s,v){return s+v;},0)/vals.length).toFixed(2)) : 0;
+    var avgLine = vals.map(function(){return avg;});
+    var bgColors = sessions.map(function(){ return dark ? '#22c55e25' : '#22c55e30'; });
+    var bdColors = sessions.map(function(){ return '#22c55e'; });
+    document.getElementById('chartCostSub').textContent = sessions.length + ' Ladevorgänge · Ø CHF ' + chf(avg,2) + ' / Ladung';
+    var ctx = document.getElementById('chartCost').getContext('2d');
+    charts.cost = new Chart(ctx, {
+      type: 'bar',
+      data: { labels: labels, datasets: [
+        { type: 'bar', data: vals, backgroundColor: bgColors, borderColor: bdColors, borderWidth: 1, borderRadius: 6, topLabel: true, topLabelFmt: function(v, j){ return v > 0 ? chf(v,0) : ''; }, order: 2 },
+        { type: 'line', data: avgLine, borderColor: '#f97316', borderWidth: 2, borderDash: [5,4], pointRadius: 0, fill: false, tension: 0, topLabel: false, label: 'Durchschnitt', order: 1 }
+      ]},
+      options: { responsive: true, maintainAspectRatio: false, layout: { padding: { top: 22 } },
+        plugins: { legend: { display: false }, tooltip: { callbacks: { label: function(c){
+          if (c.datasetIndex === 0) { var s = sessions[c.dataIndex]; return [' CHF ' + chf(c.raw) + '  total', ' ' + fmtNum(s.kwh,1) + ' kWh  ·  ' + s.loc]; }
+          return ' Ø CHF ' + chf(c.raw) + ' / Ladung';
+        } } } },
+        scales: { x: { grid: { display: false }, ticks: { font: { size: 10 }, color: '#94a3b8' } }, y: { grid: { color: gridCol }, ticks: { font: { size: 10 }, color: '#94a3b8' }, beginAtZero: true } } }
+    });
+    return;
+  }
   var monthly = aggregateMonthly(data);
   var labels = monthly.map(function(m){return m.label;});
   var vals = monthly.map(function(m){return parseFloat(m.cost.toFixed(2));});
@@ -660,6 +750,30 @@ function renderPriceChart(data) {
   destroyChart('price');
   var dark = document.body.classList.contains('dark');
   var gridCol = dark ? '#334155' : '#f1f5f9';
+  if (filterMonths === 1) {
+    var sessions = data.slice().sort(function(a,b){ return a.date - b.date; });
+    var labels = sessions.map(function(r){ return r.date.getDate()+'.'; });
+    var vals = sessions.map(function(r){ return r.kwh > 0 ? parseFloat((r.total/r.kwh).toFixed(3)) : 0; });
+    var nonZero = vals.filter(function(v){return v>0;});
+    var avg = nonZero.length ? parseFloat((nonZero.reduce(function(s,v){return s+v;},0)/nonZero.length).toFixed(3)) : 0;
+    var avgLine = vals.map(function(){return avg;});
+    document.getElementById('chartPriceSub').textContent = sessions.length + ' Ladevorgänge · Ø ' + chf(avg,2) + ' CHF/kWh';
+    var ctx = document.getElementById('chartPrice').getContext('2d');
+    charts.price = new Chart(ctx, {
+      type: 'line',
+      data: { labels: labels, datasets: [
+        { data: vals, borderColor: '#a855f7', backgroundColor: 'transparent', borderWidth: 2.5, fill: false, tension: 0, pointBackgroundColor: '#a855f7', pointRadius: 5, pointHoverRadius: 7, order: 2 },
+        { data: avgLine, borderColor: '#f97316', borderWidth: 2, borderDash: [5,4], pointRadius: 0, fill: false, tension: 0, order: 1 }
+      ]},
+      options: { responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display: false }, tooltip: { callbacks: { label: function(c){
+          if (c.datasetIndex === 0) { var s = sessions[c.dataIndex]; return [' CHF ' + chf(c.raw,3) + ' / kWh', ' ' + fmtNum(s.kwh,1) + ' kWh  ·  ' + s.loc]; }
+          return ' Ø CHF ' + chf(c.raw,3) + ' / kWh';
+        } } } },
+        scales: { x: { grid: { display: false }, ticks: { font: { size: 10 }, color: '#94a3b8' } }, y: { grid: { color: gridCol }, ticks: { font: { size: 10 }, color: '#94a3b8' }, beginAtZero: false } } }
+    });
+    return;
+  }
   var monthly = aggregateMonthly(data);
   var labels = monthly.map(function(m){return m.label;});
   var vals = monthly.map(function(m){ return m.kwh > 0 ? parseFloat((m.cost/m.kwh).toFixed(3)) : 0; });
@@ -675,7 +789,7 @@ function renderPriceChart(data) {
   charts.price = new Chart(ctx, {
     type: 'line',
     data: { labels: labels, datasets: [
-      { data: vals, borderColor: filterCount !== null ? 'rgba(168,85,247,0.25)' : '#a855f7', backgroundColor: '#a855f715', borderWidth: 2.5, fill: true, tension: 0.4, pointBackgroundColor: ptColors, pointRadius: ptRadii, pointHoverRadius: ptHover, order: 2 },
+      { data: vals, borderColor: filterCount !== null ? 'rgba(168,85,247,0.25)' : '#a855f7', backgroundColor: 'transparent', borderWidth: 2.5, fill: false, tension: 0, pointBackgroundColor: ptColors, pointRadius: ptRadii, pointHoverRadius: ptHover, order: 2 },
       { data: avgLine, borderColor: '#f97316', borderWidth: 2, borderDash: [5,4], pointRadius: 0, fill: false, tension: 0, order: 1 }
     ]},
     options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { callbacks: { label: function(c){ return c.datasetIndex===0 ? ' CHF ' + chf(c.raw,3) + ' / kWh' : ' Ø CHF ' + chf(c.raw,3) + ' / kWh'; } } } }, scales: { x: { grid: { display: false }, ticks: { font: { size: 10 }, color: '#94a3b8' } }, y: { grid: { color: gridCol }, ticks: { font: { size: 10 }, color: '#94a3b8' }, beginAtZero: false } } }
