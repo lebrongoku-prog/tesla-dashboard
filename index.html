@@ -49,7 +49,16 @@
   .kpi-icon.orange { background: #fff7ed; }
   .kpi-info { flex: 1; min-width: 0; }
   .kpi-label { font-size: 11px; font-weight: 600; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; }
+  .kpi-value-row { display: flex; align-items: baseline; gap: 8px; flex-wrap: nowrap; min-width: 0; }
   .kpi-value { font-size: 20px; font-weight: 700; color: #1e293b; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .kpi-trend { font-size: 11px; font-weight: 600; padding: 2px 6px; border-radius: 6px; white-space: nowrap; flex-shrink: 0; }
+  .kpi-trend.good { background: #f0fdf4; color: #16a34a; }
+  .kpi-trend.bad { background: #fef2f2; color: #dc2626; }
+  .kpi-trend.neutral { background: #f1f5f9; color: #64748b; }
+  .kpi-trend.hidden { display: none; }
+  body.dark .kpi-trend.good { background: #14532d; color: #86efac; }
+  body.dark .kpi-trend.bad { background: #450a0a; color: #fca5a5; }
+  body.dark .kpi-trend.neutral { background: #334155; color: #94a3b8; }
   .kpi-sub { font-size: 12px; color: #64748b; margin-top: 3px; }
   .charts-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin-bottom: 20px; }
   .charts-row-4 { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; margin-bottom: 20px; }
@@ -81,19 +90,25 @@
   .heatmap-legend-label { font-size: 10px; color: #94a3b8; }
   .heatmap-legend-cells { display: flex; gap: 3px; }
   .heatmap-legend-cell { width: 18px; height: 18px; border-radius: 3px; }
-  .insights-row { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; margin-bottom: 20px; }
-  @media(max-width:900px){ .insights-row{grid-template-columns:repeat(2,minmax(0,1fr));} }
-  .insight-card { background: white; border-radius: 16px; padding: 16px 18px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); border-left: 4px solid #e2e8f0; }
-  .insight-card.blue { border-left-color: #3b82f6; }
-  .insight-card.green { border-left-color: #22c55e; }
-  .insight-card.purple { border-left-color: #a855f7; }
-  .insight-card.orange { border-left-color: #f97316; }
-  .insight-label { font-size: 11px; font-weight: 600; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; }
-  .insight-main { font-size: 17px; font-weight: 700; color: #1e293b; margin-bottom: 4px; }
-  .insight-detail { font-size: 12px; color: #64748b; }
   .table-card { background: white; border-radius: 16px; padding: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); margin-bottom: 20px; }
-  .table-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+  .table-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; flex-wrap: wrap; gap: 12px; }
   .table-title { font-size: 14px; font-weight: 700; color: #1e293b; }
+  .table-controls { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .table-count { font-size: 12px; color: #94a3b8; }
+  .table-search-input { padding: 7px 10px; border-radius: 8px; border: 1.5px solid #e2e8f0; background: white; font-size: 12px; color: #1e293b; outline: none; width: 220px; transition: border-color 0.15s; }
+  .table-search-input:focus { border-color: #3b82f6; }
+  .table-search-input::placeholder { color: #94a3b8; }
+  body.dark .table-search-input { background: #0f172a; border-color: #334155; color: #f1f5f9; }
+  body.dark .table-count { color: #64748b; }
+  thead th[data-sort] { cursor: pointer; user-select: none; transition: color 0.15s; }
+  thead th[data-sort]:hover { color: #3b82f6; }
+  .sort-arrow { display: inline-block; margin-left: 4px; opacity: 0.35; font-size: 10px; }
+  thead th.sort-active { color: #3b82f6; }
+  thead th.sort-active .sort-arrow { opacity: 1; }
+  .empty-state { padding: 36px 20px; text-align: center; color: #94a3b8; font-size: 13px; }
+  .empty-state-icon { font-size: 32px; margin-bottom: 8px; opacity: 0.55; }
+  .empty-banner { background: white; border-radius: 16px; padding: 28px 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); margin-bottom: 20px; text-align: center; }
+  body.dark .empty-banner { background: #1e293b; box-shadow: 0 1px 3px rgba(0,0,0,0.4); }
   .table-scroll { overflow-x: auto; }
   table { width: 100%; border-collapse: collapse; font-size: 13px; }
   thead th { text-align: left; font-size: 11px; font-weight: 600; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px; padding: 8px 12px; border-bottom: 1px solid #f1f5f9; }
@@ -141,7 +156,6 @@
   body.dark .filter-bar { background: #1e293b; box-shadow: 0 1px 3px rgba(0,0,0,0.4); }
   body.dark .kpi-card { background: #1e293b; box-shadow: 0 1px 3px rgba(0,0,0,0.4); }
   body.dark .chart-card { background: #1e293b; box-shadow: 0 1px 3px rgba(0,0,0,0.4); }
-  body.dark .insight-card { background: #1e293b; box-shadow: 0 1px 3px rgba(0,0,0,0.4); }
   body.dark .table-card { background: #1e293b; box-shadow: 0 1px 3px rgba(0,0,0,0.4); }
   body.dark .filter-btn { background: #1e293b; border-color: #334155; color: #94a3b8; }
   body.dark .filter-btn:hover { border-color: #3b82f6; color: #3b82f6; }
@@ -157,9 +171,6 @@
   body.dark .chart-title { color: #f1f5f9; }
   body.dark .chart-sub { color: #64748b; }
   body.dark .count-filter-select { background-color: #0f172a; border-color: #334155; color: #94a3b8; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%2364748b'/%3E%3C/svg%3E"); }
-  body.dark .insight-main { color: #f1f5f9; }
-  body.dark .insight-label { color: #64748b; }
-  body.dark .insight-detail { color: #64748b; }
   body.dark .table-title { color: #f1f5f9; }
   body.dark .legend-val { color: #f1f5f9; }
   body.dark .legend-name { color: #94a3b8; }
@@ -220,7 +231,7 @@
         <span class="odometer-label">Km-Stand</span>
         <input type="number" id="odometerInput" class="odometer-input" placeholder="z.B. 12500" onchange="saveOdometer()" />
       </div>
-      <button class="refresh-btn" id="refreshBtn" onclick="triggerRefresh()" title="Daten aktualisieren">🔄</button>
+      <button class="refresh-btn" id="refreshBtn" onclick="triggerRefresh(event)" title="Daten aktualisieren · Shift-Klick: Token zurücksetzen">🔄</button>
       <button class="theme-btn" id="themeBtn" onclick="toggleTheme()" title="Hell / Dunkel">🌙</button>
       <div class="status-badge" id="statusBadge" style="display:none">
         <div class="status-dot"></div>
@@ -237,9 +248,8 @@
       <button class="filter-btn" data-months="6" onclick="setFilter(6)">6M</button>
       <button class="filter-btn" data-months="12" onclick="setFilter(12)">1J</button>
       <button class="filter-btn active" data-months="null" onclick="setFilter(null)">Alle</button>
-      <div class="filter-divider"></div>
-      <button class="filter-btn" data-year="2025" onclick="setFilterYear(2025)">2025</button>
-      <button class="filter-btn" data-year="2026" onclick="setFilterYear(2026)">2026</button>
+      <div class="filter-divider" id="yearDivider" style="display:none"></div>
+      <span id="yearButtons"></span>
     </div>
     <div class="nav-group">
       <button class="nav-btn" id="navPrev" onclick="navigate(1)" title="Vorherige Periode">&#8249;</button>
@@ -248,10 +258,15 @@
       <button class="nav-btn" id="navToday" onclick="goToToday()" title="Zum aktuellen Monat" style="font-size:11px;font-weight:600;width:auto;padding:0 9px;">Heute</button>
     </div>
   </div>
+  <div id="emptyBanner" class="empty-banner" style="display:none">
+    <div class="empty-state-icon">📭</div>
+    <div style="color:#475569;font-weight:600;font-size:14px;margin-bottom:4px">Keine Ladevorgänge in diesem Zeitraum</div>
+    <div style="color:#94a3b8;font-size:12px">Wähle einen anderen Zeitraum oder ein anderes Jahr.</div>
+  </div>
   <div class="kpi-grid">
-    <div class="kpi-card"><div class="kpi-icon blue">⚡</div><div class="kpi-info"><div class="kpi-label">Ladevorgänge</div><div class="kpi-value" id="kpiCount">–</div><div class="kpi-sub" id="kpiCountSub"></div></div></div>
-    <div class="kpi-card"><div class="kpi-icon green">💰</div><div class="kpi-info"><div class="kpi-label">Gesamtkosten</div><div class="kpi-value" id="kpiCost">–</div><div class="kpi-sub" id="kpiCostSub"></div></div></div>
-    <div class="kpi-card"><div class="kpi-icon purple">📊</div><div class="kpi-info"><div class="kpi-label">Ø Preis / kWh</div><div class="kpi-value" id="kpiAvgPrice">–</div><div class="kpi-sub" id="kpiAvgPriceSub"></div></div></div>
+    <div class="kpi-card"><div class="kpi-icon blue">⚡</div><div class="kpi-info"><div class="kpi-label">Ladevorgänge</div><div class="kpi-value-row"><span class="kpi-value" id="kpiCount">–</span><span class="kpi-trend hidden" id="kpiCountTrend"></span></div><div class="kpi-sub" id="kpiCountSub"></div></div></div>
+    <div class="kpi-card"><div class="kpi-icon green">💰</div><div class="kpi-info"><div class="kpi-label">Gesamtkosten</div><div class="kpi-value-row"><span class="kpi-value" id="kpiCost">–</span><span class="kpi-trend hidden" id="kpiCostTrend"></span></div><div class="kpi-sub" id="kpiCostSub"></div></div></div>
+    <div class="kpi-card"><div class="kpi-icon purple">📊</div><div class="kpi-info"><div class="kpi-label">Ø Preis / kWh</div><div class="kpi-value-row"><span class="kpi-value" id="kpiAvgPrice">–</span><span class="kpi-trend hidden" id="kpiAvgPriceTrend"></span></div><div class="kpi-sub" id="kpiAvgPriceSub"></div></div></div>
   </div>
   <div class="charts-row">
     <div class="chart-card"><div class="chart-header"><div class="chart-title-row"><div class="chart-title" id="countChartTitle">Ladevorgänge pro Monat</div><select id="countFilter" class="count-filter-select" onchange="setCountFilter(this.value)"><option value="">Alle</option></select></div><div class="chart-sub" id="chartCountSub"></div></div><div class="chart-wrap"><canvas id="chartCount"></canvas></div></div>
@@ -267,10 +282,24 @@
     <div class="heatmap-container" id="heatmapContainer"></div>
   </div>
   <div class="table-card">
-    <div class="table-header"><div class="table-title">Letzte Ladevorgänge</div><div style="font-size:12px;color:#94a3b8" id="tableCount"></div></div>
+    <div class="table-header">
+      <div class="table-title">Letzte Ladevorgänge</div>
+      <div class="table-controls">
+        <input type="text" id="tableSearch" class="table-search-input" placeholder="🔍 Standort, Datum, Tag …">
+        <div class="table-count" id="tableCount"></div>
+      </div>
+    </div>
     <div class="table-scroll">
       <table>
-        <thead><tr><th>Datum</th><th>Standort</th><th>Energie (kWh)</th><th>Kosten (CHF)</th><th>Preis/kWh</th><th>Wochentag</th><th>Startzeit</th></tr></thead>
+        <thead><tr>
+          <th data-sort="date">Datum<span class="sort-arrow">⇅</span></th>
+          <th data-sort="loc">Standort<span class="sort-arrow">⇅</span></th>
+          <th data-sort="kwh">Energie (kWh)<span class="sort-arrow">⇅</span></th>
+          <th data-sort="cost">Kosten (CHF)<span class="sort-arrow">⇅</span></th>
+          <th data-sort="price">Preis/kWh<span class="sort-arrow">⇅</span></th>
+          <th data-sort="day">Wochentag<span class="sort-arrow">⇅</span></th>
+          <th data-sort="time">Startzeit<span class="sort-arrow">⇅</span></th>
+        </tr></thead>
         <tbody id="tableBody"></tbody>
       </table>
     </div>
@@ -287,6 +316,9 @@ let filterYear = null;
 let navOffset = 0;
 let filterCount = null;
 let charts = {};
+let tableSortBy = 'date';
+let tableSortDir = 'desc';
+let tableSearch = '';
 
 const topLabelPlugin = {
   id: 'topLabel',
@@ -324,21 +356,6 @@ function fmtNum(n, decimals) {
 function monthKey(d) { return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0'); }
 function fmtMonth(d) { return d.toLocaleDateString('de-CH', { month: 'short', year: '2-digit' }); }
 function fmtDate(d) { return d.toLocaleDateString('de-CH', { day: '2-digit', month: '2-digit', year: 'numeric' }); }
-function fmtDuration(mins) {
-  if (!mins || mins <= 0) return '–';
-  var h = Math.floor(mins / 60);
-  var m = Math.round(mins % 60);
-  if (h > 0) return h + ' Std ' + (m > 0 ? m + ' Min' : '');
-  return m + ' Min';
-}
-function fmtDurationShort(mins) {
-  if (!mins || mins <= 0) return '–';
-  var h = Math.floor(mins / 60);
-  var m = Math.round(mins % 60);
-  if (h > 0) return h + 'h ' + String(m).padStart(2,'0') + 'min';
-  return m + ' min';
-}
-
 var WEEKDAYS = ['Mo','Di','Mi','Do','Fr','Sa','So'];
 var WEEKDAYS_LONG = ['Montag','Dienstag','Mittwoch','Donnerstag','Freitag','Samstag','Sonntag'];
 var COLORS = ['#3b82f6','#22c55e','#a855f7','#f97316','#06b6d4','#ef4444','#eab308','#ec4899','#14b8a6','#8b5cf6'];
@@ -399,31 +416,6 @@ function getToken(cb) {
   signIn();
 }
 
-function parseCSV(csv) {
-  var lines = csv.split('\n').filter(function(l){return l.trim();});
-  if (!lines.length) return [];
-  var headers = parseCSVLine(lines[0]);
-  return lines.slice(1).map(function(l) {
-    var vals = parseCSVLine(l);
-    var obj = {};
-    headers.forEach(function(h,i){ obj[h.trim()] = (vals[i]||'').trim(); });
-    return obj;
-  }).filter(function(r){return Object.keys(r).length > 1;});
-}
-
-function parseCSVLine(line) {
-  var result = [], cur = '', inQ = false;
-  for (var i = 0; i < line.length; i++) {
-    var ch = line[i];
-    if (ch === '"') {
-      if (inQ && line[i+1] === '"') { cur += '"'; i++; } else inQ = !inQ;
-    } else if (ch === ',' && !inQ) { result.push(cur); cur = ''; }
-    else { cur += ch; }
-  }
-  result.push(cur);
-  return result;
-}
-
 function parseRows(rows) {
   return rows.map(function(r) {
     var date = new Date(r.ChargeStartDateTime);
@@ -462,6 +454,42 @@ function getFilteredData() {
   var range = getDateRange();
   if (!range.start || !range.end) return allData;
   return allData.filter(function(r){ return r.date >= range.start && r.date <= range.end; });
+}
+
+function getPreviousPeriodData() {
+  if (filterYear !== null) {
+    return allData.filter(function(r){ return r.year === filterYear - 1; });
+  }
+  if (filterMonths === null) return null;
+  var range = getDateRange();
+  if (!range.start || !range.end) return null;
+  var prevEnd = new Date(range.start.getFullYear(), range.start.getMonth(), 0, 23, 59, 59); // letzter Tag des Vormonats
+  var prevStartYear = prevEnd.getFullYear(), prevStartMonth = prevEnd.getMonth() - filterMonths + 1;
+  while (prevStartMonth < 0) { prevStartMonth += 12; prevStartYear--; }
+  var prevStart = new Date(prevStartYear, prevStartMonth, 1);
+  return allData.filter(function(r){ return r.date >= prevStart && r.date <= prevEnd; });
+}
+
+function setTrend(elId, current, previous, downIsGood) {
+  var el = document.getElementById(elId);
+  if (!el) return;
+  if (previous == null || previous === 0 || current == null || isNaN(current) || isNaN(previous)) {
+    el.className = 'kpi-trend hidden';
+    el.textContent = '';
+    return;
+  }
+  var pct = ((current - previous) / previous) * 100;
+  var sign = pct > 0 ? '↑' : (pct < 0 ? '↓' : '→');
+  var abs = Math.abs(pct);
+  var pctStr = abs < 10 ? abs.toFixed(1) : abs.toFixed(0);
+  el.textContent = sign + ' ' + pctStr + '%';
+  el.title = 'gegenüber Vorzeitraum';
+  if (abs < 0.5) {
+    el.className = 'kpi-trend neutral';
+  } else {
+    var isImprovement = downIsGood ? (pct < 0) : (pct > 0);
+    el.className = 'kpi-trend ' + (isImprovement ? 'good' : 'bad');
+  }
 }
 
 function getMaxNavOffset() {
@@ -509,6 +537,18 @@ function setFilterYear(year) {
   });
   updateNav();
   renderAll();
+}
+
+function renderYearButtons() {
+  if (!allData.length) return;
+  var years = Array.from(new Set(allData.map(function(r){ return r.year; }))).sort();
+  var container = document.getElementById('yearButtons');
+  var divider = document.getElementById('yearDivider');
+  if (years.length === 0) { container.innerHTML = ''; divider.style.display = 'none'; return; }
+  divider.style.display = '';
+  container.innerHTML = years.map(function(y){
+    return '<button class="filter-btn" data-year="' + y + '" onclick="setFilterYear(' + y + ')">' + y + '</button>';
+  }).join('');
 }
 
 function setCountFilter(val) {
@@ -561,7 +601,34 @@ function aggregateMonthly(data) {
 
 function renderAll() {
   var data = getFilteredData();
-  if (!data.length) return;
+  var emptyBanner = document.getElementById('emptyBanner');
+  if (!data.length) {
+    // KPIs leeren
+    document.getElementById('kpiCount').textContent = '0';
+    document.getElementById('kpiCountSub').textContent = '';
+    document.getElementById('kpiCost').textContent = 'CHF 0';
+    document.getElementById('kpiCostSub').textContent = '';
+    document.getElementById('kpiAvgPrice').textContent = '–';
+    document.getElementById('kpiAvgPriceSub').textContent = '';
+    setTrend('kpiCountTrend', null, null);
+    setTrend('kpiCostTrend', null, null);
+    setTrend('kpiAvgPriceTrend', null, null);
+    // Charts zerstören
+    ['count','cost','price','loc','day'].forEach(destroyChart);
+    var cal = document.getElementById('countCalendar');
+    if (cal) cal.remove();
+    document.getElementById('heatmapContainer').innerHTML = '<div class="empty-state"><div class="empty-state-icon">📊</div>Keine Daten in diesem Zeitraum</div>';
+    document.getElementById('locLegend').innerHTML = '';
+    document.getElementById('chartCountSub').textContent = '';
+    document.getElementById('chartCostSub').textContent = '';
+    document.getElementById('chartPriceSub').textContent = '';
+    document.getElementById('chartDaySub').textContent = '';
+    document.getElementById('chartLocSub').textContent = '';
+    if (emptyBanner) emptyBanner.style.display = 'block';
+    renderTable([]);
+    return;
+  }
+  if (emptyBanner) emptyBanner.style.display = 'none';
   renderKPIs(data);
   renderCostChart(data);
   renderCountChart(data);
@@ -596,27 +663,22 @@ function renderKPIs(data) {
   document.getElementById('kpiCostSub').textContent = 'Ø CHF ' + chf(totalCost/count) + ' / Ladung' + chfKmSub;
   document.getElementById('kpiAvgPrice').textContent = 'CHF ' + chf(avgPrice, 2);
   document.getElementById('kpiAvgPriceSub').textContent = 'Gesamtdurchschnitt';
-}
 
-function renderEnergyChart(data) {
-  destroyChart('energy');
-  var dark = document.body.classList.contains('dark');
-  var gridCol = dark ? '#334155' : '#f1f5f9';
-  var monthly = aggregateMonthly(data);
-  var labels = monthly.map(function(m){return m.label;});
-  var vals = monthly.map(function(m){return parseFloat(m.kwh.toFixed(1));});
-  var avg = vals.length ? parseFloat((vals.reduce(function(s,v){return s+v;},0)/vals.length).toFixed(1)) : 0;
-  var avgLine = vals.map(function(){return avg;});
-  document.getElementById('chartEnergySub').textContent = monthly.length + ' Monate · Ø ' + fmtNum(avg,1) + ' kWh';
-  var ctx = document.getElementById('chartEnergy').getContext('2d');
-  charts.energy = new Chart(ctx, {
-    type: 'bar',
-    data: { labels: labels, datasets: [
-      { type: 'bar', data: vals, backgroundColor: '#3b82f620', borderColor: '#3b82f6', borderWidth: 2, borderRadius: 6, topLabel: true, topLabelFmt: function(v){ return v > 0 ? fmtNum(v,0) : ''; }, order: 2 },
-      { type: 'line', data: avgLine, borderColor: '#f97316', borderWidth: 2, borderDash: [5,4], pointRadius: 0, fill: false, tension: 0, topLabel: false, label: 'Durchschnitt', order: 1 }
-    ]},
-    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { callbacks: { label: function(c){ return c.datasetIndex===0 ? ' ' + fmtNum(c.raw,1) + ' kWh' : ' Ø ' + fmtNum(c.raw,1) + ' kWh'; } } } }, scales: { x: { grid: { display: false }, ticks: { font: { size: 10 }, color: '#94a3b8' } }, y: { grid: { color: gridCol }, ticks: { font: { size: 10 }, color: '#94a3b8' }, beginAtZero: true } } }
-  });
+  // Trend-Indikatoren ggü. Vorzeitraum
+  var prev = getPreviousPeriodData();
+  if (prev && prev.length > 0) {
+    var prevCount = prev.length;
+    var prevKwh = prev.reduce(function(s,r){return s+r.kwh;}, 0);
+    var prevCost = prev.reduce(function(s,r){return s+r.total;}, 0);
+    var prevAvgPrice = prevKwh > 0 ? prevCost / prevKwh : 0;
+    setTrend('kpiCountTrend', count, prevCount, false);       // mehr Ladungen = informativ-positiv
+    setTrend('kpiCostTrend', totalCost, prevCost, true);      // weniger Kosten = gut
+    setTrend('kpiAvgPriceTrend', avgPrice, prevAvgPrice, true); // weniger pro kWh = gut
+  } else {
+    setTrend('kpiCountTrend', null, null);
+    setTrend('kpiCostTrend', null, null);
+    setTrend('kpiAvgPriceTrend', null, null);
+  }
 }
 
 function renderCountChart(data) {
@@ -916,47 +978,68 @@ function renderHeatmap(data) {
   document.getElementById('heatmapContainer').innerHTML = '<div class="heatmap-grid">' + colLabels + rows + '</div><div class="heatmap-legend-row"><span class="heatmap-legend-label">wenig</span><div class="heatmap-legend-cells">' + legendCells + '</div><span class="heatmap-legend-label">viel</span></div>';
 }
 
-function renderInsights(data) {
-  var monthly = aggregateMonthly(data);
-  var effMonths = monthly.filter(function(m){return m.cost > 0;}).map(function(m){return Object.assign({}, m, {eff: m.kwh/m.cost});});
-  var bestEff = effMonths.sort(function(a,b){return b.eff-a.eff;})[0];
-  if (bestEff) {
-    document.getElementById('ins1Main').textContent = bestEff.label;
-    document.getElementById('ins1Detail').textContent = fmtNum(bestEff.eff,2) + ' kWh / CHF · ' + fmtNum(bestEff.kwh,1) + ' kWh total';
-  }
-  var locStats = {};
-  data.forEach(function(r){ if (!locStats[r.loc]) locStats[r.loc] = {kwh:0,cost:0,count:0}; locStats[r.loc].kwh += r.kwh; locStats[r.loc].cost += r.total; locStats[r.loc].count++; });
-  var cheapLoc = Object.entries(locStats).filter(function(e){return e[1].kwh>0 && e[1].count>=2;}).map(function(e){return {name:e[0], avg:e[1].cost/e[1].kwh, count:e[1].count};}).sort(function(a,b){return a.avg-b.avg;})[0];
-  if (cheapLoc) {
-    document.getElementById('ins2Main').textContent = cheapLoc.name;
-    document.getElementById('ins2Detail').textContent = 'CHF ' + chf(cheapLoc.avg,3) + ' / kWh · ' + cheapLoc.count + '× geladen';
-  }
-  var hourCounts = new Array(24).fill(0);
-  data.forEach(function(r){ hourCounts[r.hour]++; });
-  var maxH = Math.max.apply(null, hourCounts);
-  var topHour = hourCounts.indexOf(maxH);
-  document.getElementById('ins3Main').textContent = topHour + ':00 – ' + (topHour+1) + ':00 Uhr';
-  document.getElementById('ins3Detail').textContent = hourCounts[topHour] + ' Ladevorgänge in dieser Stunde';
-  var biggest = data.slice().sort(function(a,b){return b.kwh-a.kwh;})[0];
-  if (biggest) {
-    document.getElementById('ins4Main').textContent = fmtNum(biggest.kwh,1) + ' kWh';
-    document.getElementById('ins4Detail').textContent = fmtDate(biggest.date) + ' · ' + biggest.loc + ' · CHF ' + chf(biggest.total);
-  }
-}
-
 function renderTable(data) {
-  var showAll = (filterMonths === 1 || filterMonths === 3);
-  var sorted = data.slice().sort(function(a,b){return b.date-a.date;});
-  if (!showAll) sorted = sorted.slice(0,15);
+  // 1. Suchfilter
+  var searched = data;
+  if (tableSearch) {
+    searched = data.filter(function(r){
+      var dateStr = fmtDate(r.date).toLowerCase();
+      var dayStr = WEEKDAYS_LONG[r.dayIdx].toLowerCase();
+      var locStr = r.loc.toLowerCase();
+      return dateStr.indexOf(tableSearch) !== -1 || dayStr.indexOf(tableSearch) !== -1 || locStr.indexOf(tableSearch) !== -1;
+    });
+  }
+
+  // 2. Sortierung
+  var sorted = searched.slice().sort(function(a, b) {
+    var av, bv;
+    switch (tableSortBy) {
+      case 'loc':   av = a.loc; bv = b.loc; break;
+      case 'kwh':   av = a.kwh; bv = b.kwh; break;
+      case 'cost':  av = a.total; bv = b.total; break;
+      case 'price': av = a.kwh > 0 ? a.total/a.kwh : 0; bv = b.kwh > 0 ? b.total/b.kwh : 0; break;
+      case 'day':   av = a.dayIdx; bv = b.dayIdx; break;
+      case 'time':  av = a.date.getHours()*60 + a.date.getMinutes(); bv = b.date.getHours()*60 + b.date.getMinutes(); break;
+      default:      av = a.date.getTime(); bv = b.date.getTime();
+    }
+    if (typeof av === 'string') return tableSortDir === 'asc' ? av.localeCompare(bv) : bv.localeCompare(av);
+    return tableSortDir === 'asc' ? av - bv : bv - av;
+  });
+
+  // 3. Header-Pfeile aktualisieren
+  document.querySelectorAll('thead th[data-sort]').forEach(function(th) {
+    var arrow = th.querySelector('.sort-arrow');
+    if (th.dataset.sort === tableSortBy) {
+      th.classList.add('sort-active');
+      arrow.textContent = tableSortDir === 'asc' ? '▲' : '▼';
+    } else {
+      th.classList.remove('sort-active');
+      arrow.textContent = '⇅';
+    }
+  });
+
+  var body = document.getElementById('tableBody');
+  // 4. Empty-State
+  if (sorted.length === 0) {
+    document.getElementById('tableCount').textContent = '0 Treffer';
+    body.innerHTML = '<tr><td colspan="7"><div class="empty-state"><div class="empty-state-icon">🔍</div>Keine Treffer' + (tableSearch ? ' für „' + tableSearch + '"' : ' in diesem Zeitraum') + '</div></td></tr>';
+    return;
+  }
+
+  // 5. Limitierung: nur bei Default-Sortierung (Datum desc), kein Sucheingabe, kein 1M/3M Filter
+  var defaultSort = (tableSortBy === 'date' && tableSortDir === 'desc');
+  var showAll = (filterMonths === 1 || filterMonths === 3 || tableSearch || !defaultSort);
+  var display = showAll ? sorted : sorted.slice(0, 15);
+
   document.getElementById('tableCount').textContent = showAll
-    ? data.length + ' Einträge'
-    : data.length + ' Einträge total, letzte 15 angezeigt';
+    ? sorted.length + ' Einträge'
+    : data.length + ' Einträge total, erste 15 angezeigt';
+
   var monthOrder = [];
-  sorted.forEach(function(r) {
+  display.forEach(function(r) {
     if (monthOrder.indexOf(r.monthKey) === -1) monthOrder.push(r.monthKey);
   });
-  var body = document.getElementById('tableBody');
-  body.innerHTML = sorted.map(function(r, i) {
+  body.innerHTML = display.map(function(r) {
     var avgP = r.kwh > 0 ? r.total/r.kwh : 0;
     var dayClass = r.dayIdx < 5 ? 'blue' : 'orange';
     var timeStr = r.date.toLocaleTimeString('de-CH', {hour:'2-digit', minute:'2-digit'});
@@ -992,11 +1075,9 @@ async function loadData() {
     }).filter(function(r) { return Object.keys(r).length > 1; });
     allData = parseRows(rows);
     if (!allData.length) throw new Error('Keine gültigen Einträge gefunden. Zeilen im Sheet: ' + rows.length);
-    var dates = allData.map(function(r){return r.date;});
-    var minD = new Date(Math.min.apply(null, dates));
-    var maxD = new Date(Math.max.apply(null, dates));
     document.getElementById('statusBadge').style.display = 'flex';
     document.getElementById('statusText').textContent = allData.length + ' Einträge';
+    renderYearButtons();
     updateNav();
     renderAll();
     document.getElementById('loadingOverlay').style.display = 'none';
@@ -1014,20 +1095,69 @@ function saveOdometer() {
   if (allData.length) renderKPIs(getFilteredData());
 }
 
-const REFRESH_URL = 'https://script.google.com/macros/s/AKfycbzplDQKzviFvZkT-mb8xChF-9AN3Eu15mMC-et_JSFyhRHPCEw-2F7oYgW0ehwQGvJzJw/exec?refresh=true&token=Fml2gnpg30c29azOQ7GUDCLIIXwMwypq';
+const REFRESH_ENDPOINT = 'https://script.google.com/macros/s/AKfycbzplDQKzviFvZkT-mb8xChF-9AN3Eu15mMC-et_JSFyhRHPCEw-2F7oYgW0ehwQGvJzJw/exec';
+const REFRESH_TOKEN_KEY = 'tesla-refresh-token';
 
-async function triggerRefresh() {
+function getRefreshToken(force) {
+  var stored = null;
+  try { stored = localStorage.getItem(REFRESH_TOKEN_KEY); } catch(_) {}
+  if (stored && !force) return stored;
+  var entered = prompt(
+    force
+      ? 'Der gespeicherte Token wurde abgelehnt.\nBitte aktuellen Apps-Script-Token eingeben:'
+      : 'Bitte Apps-Script-Token eingeben\n(wird nur lokal in diesem Browser gespeichert):',
+    ''
+  );
+  if (!entered) return null;
+  entered = entered.trim();
+  if (!entered) return null;
+  try { localStorage.setItem(REFRESH_TOKEN_KEY, entered); } catch(_) {}
+  return entered;
+}
+
+// Erlaubt manuelles Zurücksetzen: Shift-Klick auf den Refresh-Button löscht den Token.
+function resetRefreshToken() {
+  try { localStorage.removeItem(REFRESH_TOKEN_KEY); } catch(_) {}
+}
+
+async function triggerRefresh(event) {
   var btn = document.getElementById('refreshBtn');
+  // Shift-Klick: Token zurücksetzen statt Refresh auslösen
+  if (event && event.shiftKey) {
+    resetRefreshToken();
+    btn.textContent = '🗑️';
+    setTimeout(function(){ btn.textContent = '🔄'; }, 1500);
+    return;
+  }
+  var token = getRefreshToken(false);
+  if (!token) {
+    btn.textContent = '⚠️';
+    setTimeout(function(){ btn.textContent = '🔄'; }, 1500);
+    return;
+  }
   btn.disabled = true;
   btn.classList.add('spinning');
   btn.textContent = '🔄';
+  var url = REFRESH_ENDPOINT + '?refresh=true&token=' + encodeURIComponent(token);
   try {
-    var resp = await fetch(REFRESH_URL);
+    var resp = await fetch(url);
     var data = await resp.json();
     btn.classList.remove('spinning');
     if (data.status === 'success') {
       btn.textContent = '✅';
       await loadData();
+    } else if (data.status === 'unauthorized' || resp.status === 401 || resp.status === 403) {
+      // Token war ungültig – löschen und neu fragen
+      resetRefreshToken();
+      btn.textContent = '🔑';
+      var newToken = getRefreshToken(true);
+      btn.disabled = false;
+      btn.textContent = '🔄';
+      if (newToken) {
+        // direkt nochmal versuchen
+        setTimeout(function(){ triggerRefresh(); }, 200);
+        return;
+      }
     } else {
       btn.textContent = '❌';
     }
@@ -1061,6 +1191,26 @@ try {
     document.getElementById('themeBtn').textContent = '☀️';
   }
 } catch(_) {}
+
+// Tabellen-Sortierung: Klick-Handler für Header
+document.querySelectorAll('thead th[data-sort]').forEach(function(th) {
+  th.addEventListener('click', function() {
+    var col = th.dataset.sort;
+    if (tableSortBy === col) {
+      tableSortDir = tableSortDir === 'asc' ? 'desc' : 'asc';
+    } else {
+      tableSortBy = col;
+      tableSortDir = (col === 'date' || col === 'kwh' || col === 'cost' || col === 'price') ? 'desc' : 'asc';
+    }
+    if (allData.length) renderTable(getFilteredData());
+  });
+});
+
+// Tabellen-Suche
+document.getElementById('tableSearch').addEventListener('input', function(e) {
+  tableSearch = e.target.value.toLowerCase().trim();
+  if (allData.length) renderTable(getFilteredData());
+});
 
 // Start Google Auth on page load
 initGoogleAuth();
