@@ -24,19 +24,21 @@ Im Projektroot:
 | `icons/` | 9 App-Icons (SVG + 8 PNG-Größen: 32/120/152/167/180/192/512/1024) | ✅ Ja |
 | `README.md` | Repo-README (existiert auf GitHub, lokal ggf. nicht) | ✅ Ja |
 | `CLAUDE.md` | Diese Datei | ✅ Ja |
-| `.gitignore` | Muss noch erstellt werden — siehe unten | ✅ Ja |
+| `.gitignore` | Existiert | ✅ Ja |
 | `DASHBOARD_VORLAGE.md` | Persönliche Notizen/Vorlage von Leonard | ❌ Nein (siehe .gitignore) |
+| `CLAUDE-CODE-ONBOARDING.md` | Übergabe-Notizen, bewusst privat | ❌ Nein |
 | `Tesla-Web-Dashboard-Anleitung.docx` | Persönliche Anleitung | ❌ Nein |
 | `PWA-Icon-Briefing.md`, `PWA-Vollbild-Briefing.md` | Wiederverwendbare Prompt-Vorlagen für andere Projekte | ❌ Nein |
 | `.DS_Store` | macOS-Cruft | ❌ Nein |
 
-**Empfohlener `.gitignore`:**
+**Aktueller `.gitignore`:**
 
 ```
 .DS_Store
 DASHBOARD_VORLAGE.md
 Tesla-Web-Dashboard-Anleitung.docx
 PWA-*.md
+CLAUDE-CODE-ONBOARDING.md
 ```
 
 ## Pflicht-Workflow bei jeder Änderung
@@ -45,9 +47,9 @@ Diese Reihenfolge ist zwingend, sonst gibt es 404s auf GitHub Pages oder iOS zei
 
 1. **Änderung machen** in `index.html`, `manifest.json` oder `icons/`.
 2. **Bei Änderung an Icons oder wenn sich das Cache-Verhalten ändern soll:** Den Cache-Buster `?v=N` in `index.html` und `manifest.json` hochzählen. Aktueller Stand: `?v=2` in den `apple-touch-icon`- und `icon`-Links.
-3. **JS-Syntax-Check vor jedem Commit** (Node ist installiert):
+3. **JS-Syntax-Check vor jedem Commit.** Node ist auf diesem Mac **nicht** installiert (auch kein Homebrew/nvm/deno/bun, kein `gh`). Ersatz ist `osacompile` (JavaScriptCore, macOS-bordeigen) — erkennt Syntaxfehler mit Zeilennummer und Exit-Code 1:
    ```bash
-   python3 -c "import re; html=open('index.html').read(); s=re.findall(r'<script(?![^>]*src=)[^>]*>(.*?)</script>', html, re.S); open('/tmp/_check.js','w').write(s[-1])" && node --check /tmp/_check.js
+   python3 -c "import re; html=open('index.html').read(); s=re.findall(r'<script(?![^>]*src=)[^>]*>(.*?)</script>', html, re.S); open('/tmp/_check.js','w').write(s[-1])" && osacompile -l JavaScript -o /tmp/_check.scpt /tmp/_check.js && echo "SYNTAX OK"
    ```
 4. **JSON validieren:**
    ```bash
@@ -150,15 +152,19 @@ Spalten aus dem Sheet: `ChargeStartDateTime`, `SiteLocationName`, `QuantityBase`
 ## Nützliche Befehle
 
 ```bash
-# Repo-Setup (einmalig)
-cd "/Users/leonard/Documents/Claude/Projects/Tesla Charging Dashboard"
-git init
-git remote add origin https://github.com/lebrongoku-prog/tesla-dashboard.git
-git fetch origin
-git checkout main   # oder: git switch -c main --track origin/main
+# Repo-Setup — ERLEDIGT (26.07.2026). Ordner ist mit origin/main verbunden,
+# Push läuft über den macOS-Keychain (kein gh CLI installiert).
+# Commit-Identität ist lokal gesetzt: lebrongoku-prog / @users.noreply.github.com
+#
+# Falls das Setup je wiederholt werden muss (ohne Merge-Konflikte):
+#   git init -b main
+#   git remote add origin https://github.com/lebrongoku-prog/tesla-dashboard.git
+#   git fetch origin
+#   git reset origin/main        # mixed: Arbeitsverzeichnis bleibt unangetastet
+#   git checkout -- README.md    # liegt nur remote, lokal nachziehen
 
-# JS-Syntax-Check (vor jedem Commit)
-python3 -c "import re; html=open('index.html').read(); s=re.findall(r'<script(?![^>]*src=)[^>]*>(.*?)</script>', html, re.S); open('/tmp/_check.js','w').write(s[-1])" && node --check /tmp/_check.js
+# JS-Syntax-Check (vor jedem Commit) — kein Node auf diesem Mac, daher osacompile
+python3 -c "import re; html=open('index.html').read(); s=re.findall(r'<script(?![^>]*src=)[^>]*>(.*?)</script>', html, re.S); open('/tmp/_check.js','w').write(s[-1])" && osacompile -l JavaScript -o /tmp/_check.scpt /tmp/_check.js && echo "SYNTAX OK"
 
 # manifest.json validieren
 python3 -c "import json; json.load(open('manifest.json'))"
