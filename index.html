@@ -374,6 +374,45 @@
     <div class="kpi-card"><div class="kpi-icon green">💰</div><div class="kpi-info"><div class="kpi-label">Gesamtkosten</div><div class="kpi-value-row"><span class="kpi-value" id="kpiCost">–</span><span class="kpi-trend hidden" id="kpiCostTrend"></span></div><div class="kpi-sub" id="kpiCostSub"></div></div></div>
     <div class="kpi-card"><div class="kpi-icon purple">📊</div><div class="kpi-info"><div class="kpi-label">Ø Preis / kWh</div><div class="kpi-value-row"><span class="kpi-value" id="kpiAvgPrice">–</span><span class="kpi-trend hidden" id="kpiAvgPriceTrend"></span></div><div class="kpi-sub" id="kpiAvgPriceSub"></div></div></div>
   </div>
+  <div class="charts-row">
+    <div class="chart-card"><div class="chart-header"><div class="chart-title-row"><div class="chart-title" id="countChartTitle">Ladevorgänge pro Monat</div><select id="countFilter" class="count-filter-select" onchange="setCountFilter(this.value)"><option value="">Alle</option></select></div><div class="chart-sub" id="chartCountSub"></div></div><div class="chart-wrap"><canvas id="chartCount"></canvas></div></div>
+    <div class="chart-card"><div class="chart-header"><div class="chart-title">Kosten pro Monat</div><div class="chart-sub" id="chartCostSub"></div></div><div class="chart-wrap"><canvas id="chartCost"></canvas></div></div>
+    <div class="chart-card"><div class="chart-header"><div class="chart-title">Ø Preis pro Monat</div><div class="chart-sub" id="chartPriceSub"></div></div><div class="chart-wrap"><canvas id="chartPrice"></canvas></div></div>
+  </div>
+  <div class="charts-row" style="grid-template-columns:repeat(2,minmax(0,1fr))">
+    <div class="chart-card"><div class="chart-header"><div class="chart-title">Ladevorgänge nach Wochentag</div><div class="chart-sub" id="chartDaySub"></div></div><div class="chart-wrap"><canvas id="chartDay"></canvas></div></div>
+    <div class="chart-card"><div class="chart-header"><div class="chart-title">Kosten nach Standort</div><div class="chart-sub" id="chartLocSub"></div></div><div class="donut-wrap"><div class="donut-chart-wrap"><canvas id="chartLoc"></canvas></div><div class="donut-legend" id="locLegend"></div></div></div>
+  </div>
+  <div class="chart-card" style="margin-bottom:20px">
+    <div class="chart-header">
+      <div class="chart-title-row">
+        <div class="chart-title">Jahresvergleich</div>
+        <select id="yearCmpMetric" class="count-filter-select" onchange="setYearCmpMetric(this.value)">
+          <option value="count">Ladevorgänge</option>
+          <option value="cost">Kosten</option>
+          <option value="kwh">Energie</option>
+        </select>
+      </div>
+      <div class="chart-sub" id="yearCmpSub"></div>
+    </div>
+    <div class="chart-wrap" style="height:240px"><canvas id="chartYearCmp"></canvas></div>
+  </div>
+  <div class="chart-card" style="margin-bottom:20px">
+    <div class="chart-header">
+      <div class="chart-title-row">
+        <div class="chart-title" id="yearGridTitle">Das Jahr auf einen Blick</div>
+        <select id="yearGridSelect" class="count-filter-select" onchange="setYearGridYear(this.value)"></select>
+      </div>
+      <div class="chart-sub" id="yearGridSub"></div>
+    </div>
+    <div class="year-scroll"><div class="year-inner" id="yearGridContainer"></div></div>
+    <div class="year-legend" id="yearGridLegend"></div>
+  </div>
+  <div class="chart-card" style="margin-bottom:20px">
+    <div class="chart-header"><div class="chart-title">Ladezeiten-Heatmap</div><div class="chart-sub">Wochentag × Stunde</div></div>
+    <div class="heatmap-container" id="heatmapContainer"></div>
+    <div class="insight-row" id="insightRow" style="display:none"></div>
+  </div>
   <div class="savings-card" id="savingsCard">
     <div class="savings-main">
       <div class="savings-label">Ersparnis gegenüber einem Benziner</div>
@@ -396,45 +435,6 @@
   <div class="chart-card" style="margin-bottom:20px">
     <div class="chart-header"><div class="chart-title">Deine Rekorde</div><div class="chart-sub" id="recordsSub"></div></div>
     <div class="records-grid" id="recordsGrid"></div>
-  </div>
-  <div class="charts-row">
-    <div class="chart-card"><div class="chart-header"><div class="chart-title-row"><div class="chart-title" id="countChartTitle">Ladevorgänge pro Monat</div><select id="countFilter" class="count-filter-select" onchange="setCountFilter(this.value)"><option value="">Alle</option></select></div><div class="chart-sub" id="chartCountSub"></div></div><div class="chart-wrap"><canvas id="chartCount"></canvas></div></div>
-    <div class="chart-card"><div class="chart-header"><div class="chart-title">Kosten pro Monat</div><div class="chart-sub" id="chartCostSub"></div></div><div class="chart-wrap"><canvas id="chartCost"></canvas></div></div>
-    <div class="chart-card"><div class="chart-header"><div class="chart-title">Ø Preis pro Monat</div><div class="chart-sub" id="chartPriceSub"></div></div><div class="chart-wrap"><canvas id="chartPrice"></canvas></div></div>
-  </div>
-  <div class="charts-row" style="grid-template-columns:repeat(2,minmax(0,1fr))">
-    <div class="chart-card"><div class="chart-header"><div class="chart-title">Ladevorgänge nach Wochentag</div><div class="chart-sub" id="chartDaySub"></div></div><div class="chart-wrap"><canvas id="chartDay"></canvas></div></div>
-    <div class="chart-card"><div class="chart-header"><div class="chart-title">Kosten nach Standort</div><div class="chart-sub" id="chartLocSub"></div></div><div class="donut-wrap"><div class="donut-chart-wrap"><canvas id="chartLoc"></canvas></div><div class="donut-legend" id="locLegend"></div></div></div>
-  </div>
-  <div class="chart-card" style="margin-bottom:20px">
-    <div class="chart-header"><div class="chart-title">Ladezeiten-Heatmap</div><div class="chart-sub">Wochentag × Stunde</div></div>
-    <div class="heatmap-container" id="heatmapContainer"></div>
-    <div class="insight-row" id="insightRow" style="display:none"></div>
-  </div>
-  <div class="chart-card" style="margin-bottom:20px">
-    <div class="chart-header">
-      <div class="chart-title-row">
-        <div class="chart-title" id="yearGridTitle">Das Jahr auf einen Blick</div>
-        <select id="yearGridSelect" class="count-filter-select" onchange="setYearGridYear(this.value)"></select>
-      </div>
-      <div class="chart-sub" id="yearGridSub"></div>
-    </div>
-    <div class="year-scroll"><div class="year-inner" id="yearGridContainer"></div></div>
-    <div class="year-legend" id="yearGridLegend"></div>
-  </div>
-  <div class="chart-card" style="margin-bottom:20px">
-    <div class="chart-header">
-      <div class="chart-title-row">
-        <div class="chart-title">Jahresvergleich</div>
-        <select id="yearCmpMetric" class="count-filter-select" onchange="setYearCmpMetric(this.value)">
-          <option value="count">Ladevorgänge</option>
-          <option value="cost">Kosten</option>
-          <option value="kwh">Energie</option>
-        </select>
-      </div>
-      <div class="chart-sub" id="yearCmpSub"></div>
-    </div>
-    <div class="chart-wrap" style="height:240px"><canvas id="chartYearCmp"></canvas></div>
   </div>
   <div class="table-card">
     <div class="table-header">
