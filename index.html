@@ -251,15 +251,18 @@
   body.dark .record-meta { color: #64748b; }
 
   /* ── Jahresraster (365 Kästchen) ── */
+  /* Das Raster füllt die volle Kartenbreite: Spaltenzahl kommt per --year-cols aus dem JS,
+     die Zellen wachsen mit (1fr) und bleiben durch aspect-ratio quadratisch.
+     minmax(8px, …) sorgt dafür, dass auf schmalen Bildschirmen stattdessen gescrollt wird. */
   .year-scroll { overflow-x: auto; padding-bottom: 4px; }
-  .year-inner { display: inline-block; min-width: 100%; }
-  .year-months { display: grid; grid-auto-flow: column; grid-auto-columns: 11px; gap: 3px; margin-left: 27px; margin-bottom: 3px; }
+  .year-inner { display: block; width: 100%; }
+  .year-months { display: grid; grid-template-columns: repeat(var(--year-cols, 53), minmax(8px, 1fr)); gap: 3px; margin-left: 27px; margin-bottom: 4px; }
   .year-month-label { font-size: 9px; color: #94a3b8; white-space: nowrap; }
-  .year-body { display: flex; gap: 4px; }
-  .year-daylabels { display: grid; grid-template-rows: repeat(7, 11px); gap: 3px; }
-  .year-daylabel { font-size: 9px; color: #94a3b8; line-height: 11px; width: 23px; text-align: right; }
-  .year-grid { display: grid; grid-template-rows: repeat(7, 11px); grid-auto-flow: column; grid-auto-columns: 11px; gap: 3px; }
-  .year-cell { border-radius: 3px; background: #e2e8f0; }
+  .year-body { display: flex; gap: 4px; align-items: stretch; }
+  .year-daylabels { display: grid; grid-template-rows: repeat(7, 1fr); gap: 3px; width: 23px; flex-shrink: 0; }
+  .year-daylabel { font-size: 9px; color: #94a3b8; text-align: right; display: flex; align-items: center; justify-content: flex-end; }
+  .year-grid { display: grid; grid-template-columns: repeat(var(--year-cols, 53), minmax(8px, 1fr)); grid-template-rows: repeat(7, auto); grid-auto-flow: column; gap: 3px; flex: 1 1 auto; }
+  .year-cell { border-radius: 3px; background: #e2e8f0; aspect-ratio: 1; }
   .year-cell.empty { background: transparent; }
   .year-legend { display: flex; align-items: center; gap: 6px; margin-top: 12px; justify-content: flex-end; flex-wrap: wrap; }
   .year-legend-label { font-size: 10px; color: #94a3b8; }
@@ -1463,6 +1466,7 @@ function renderYearGrid() {
     return '<div class="year-legend-cell" style="background:' + cellColor(Math.round(f * maxCount)) + '"></div>';
   }).join('');
 
+  container.style.setProperty('--year-cols', spalten);
   container.innerHTML = monthsHtml + '<div class="year-body">' + labelsHtml + '<div class="year-grid">' + cells + '</div></div>';
   // Legende liegt bewusst ausserhalb des scrollbaren Rasters, damit sie immer sichtbar bleibt
   document.getElementById('yearGridLegend').innerHTML =
