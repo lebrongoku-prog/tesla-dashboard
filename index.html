@@ -53,10 +53,6 @@
     --text-muted: #64748b;
     --text-label: #94a3b8;           /* Beschriftungen */
 
-    /* Beschriftungen, die im Dunkelmodus bewusst unverändert bleiben.
-       Historisch gewachsen: diese Stellen hatten nie eine dunkle Variante. */
-    --text-label-fixed: #94a3b8;
-
     /* Akzente */
     --accent: #3b82f6;
     --accent-green: #22c55e;
@@ -151,7 +147,7 @@
     background: var(--btn-bg); color: var(--text-strong);
     font-size: 12px; font-weight: 600; padding: 0 8px; outline: none; text-align: right;
   }
-  .odometer-input::placeholder { color: var(--text-label-fixed); font-weight: 400; }
+  .odometer-input::placeholder { color: var(--text-label); font-weight: 400; }
   .odometer-input:focus { border-color: var(--accent); }
 
   /* Aktualisieren und Hell/Dunkel teilen sich dieselbe runde Form */
@@ -241,15 +237,15 @@
   }
   body.dark .savings-card::before { background: linear-gradient(120deg, rgba(34,197,94,0.16), rgba(34,197,94,0) 55%); }
   .savings-main { flex: 1 1 260px; min-width: 0; position: relative; }
-  .savings-label { font-size: 11px; font-weight: 600; color: var(--text-label-fixed); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; }
+  .savings-label { font-size: 11px; font-weight: 600; color: var(--text-label); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; }
   .savings-value { font-size: 34px; font-weight: 800; color: #16a34a; line-height: 1.05; white-space: nowrap; }
   body.dark .savings-value { color: #4ade80; }
   .savings-sub { font-size: 12px; color: var(--text-muted); margin-top: 6px; }
   .savings-side { display: flex; gap: 26px; flex-wrap: wrap; position: relative; }
   .savings-stat-value { font-size: 17px; font-weight: 700; color: var(--text-strong); white-space: nowrap; }
-  .savings-stat-label { font-size: 11px; color: var(--text-label-fixed); margin-top: 2px; }
+  .savings-stat-label { font-size: 11px; color: var(--text-label); margin-top: 2px; }
   .savings-settings {
-    width: 100%; font-size: 11px; color: var(--text-label-fixed);
+    width: 100%; font-size: 11px; color: var(--text-label);
     display: flex; align-items: center; gap: 5px; flex-wrap: wrap; position: relative;
     border-top: 1px solid var(--divider); padding-top: 12px;
   }
@@ -353,7 +349,7 @@
     font-size: 12px; outline: none; width: 220px; transition: border-color 0.15s;
   }
   .table-search-input:focus { border-color: var(--accent); }
-  .table-search-input::placeholder { color: var(--text-label-fixed); }
+  .table-search-input::placeholder { color: var(--text-label); }
 
   .table-scroll { overflow-x: auto; }
   table { width: 100%; border-collapse: collapse; font-size: 13px; }
@@ -394,7 +390,7 @@
   body.dark .badge-orange { background: #431407; color: #fb923c; }
 
   /* ── Leerzustände ─────────────────────────────────────────────── */
-  .empty-state { padding: 36px 20px; text-align: center; color: var(--text-label-fixed); font-size: 13px; }
+  .empty-state { padding: 36px 20px; text-align: center; color: var(--text-label); font-size: 13px; }
   .empty-state-icon { font-size: 32px; margin-bottom: 8px; opacity: 0.55; }
   .empty-banner { padding: 28px 20px; margin-bottom: 20px; text-align: center; }
 
@@ -410,7 +406,7 @@
   }
   .detail-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 18px; }
   .detail-title { font-size: 17px; font-weight: 700; color: var(--text-strong); }
-  .detail-subtitle { font-size: 12px; color: var(--text-label-fixed); margin-top: 3px; }
+  .detail-subtitle { font-size: 12px; color: var(--text-label); margin-top: 3px; }
   .detail-close {
     width: 30px; height: 30px; border-radius: 8px; border: 1.5px solid var(--border);
     background: var(--btn-bg); color: var(--text-control);
@@ -420,10 +416,10 @@
   .detail-hero { display: flex; gap: 12px; margin-bottom: 16px; }
   .detail-hero-item { flex: 1; background: var(--surface-sunken); border-radius: 12px; padding: 12px; text-align: center; min-width: 0; }
   .detail-hero-value { font-size: 16px; font-weight: 700; color: var(--text-strong); white-space: nowrap; }
-  .detail-hero-label { font-size: 10px; font-weight: 600; color: var(--text-label-fixed); text-transform: uppercase; letter-spacing: 0.4px; margin-top: 3px; }
+  .detail-hero-label { font-size: 10px; font-weight: 600; color: var(--text-label); text-transform: uppercase; letter-spacing: 0.4px; margin-top: 3px; }
   .detail-rows { display: flex; flex-direction: column; gap: 9px; }
   .detail-line { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; font-size: 13px; }
-  .detail-line-label { color: var(--text-label-fixed); }
+  .detail-line-label { color: var(--text-label); }
   .detail-line-value { color: var(--text-strong); font-weight: 600; text-align: right; }
 
   /* ── Overlays: Laden, Anmeldung, Fehler ───────────────────────── */
@@ -433,7 +429,7 @@
   }
   .spinner { width: 44px; height: 44px; border: 4px solid #e2e8f0; border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; }
   .loading-text { font-size: 15px; font-weight: 600; color: var(--text-body); }
-  .loading-sub { font-size: 13px; color: var(--text-label-fixed); }
+  .loading-sub { font-size: 13px; color: var(--text-label); }
 
   /* Die Anmeldung liegt immer auf hellem Grund und folgt daher nicht dem Dunkelmodus */
   .signin-overlay {
