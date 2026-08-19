@@ -139,7 +139,10 @@ Spalten aus dem Sheet: `ChargeStartDateTime`, `SiteLocationName`, `QuantityBase`
 - **Farben:**
   - Primär-Blau `#3b82f6`, Grün `#22c55e`, Lila `#a855f7` (Ø Preis/kWh — **nicht** Grün, war korrigiert), Orange `#f97316`, Cyan `#06b6d4`.
   - Gradient-Header: `#0C4A6E → #0EA5E9`.
-- **Tabelle:** Monatliche Gruppen abwechselnd weiß / hellblau via `.month-even` / `.month-odd`. **Keine Borders** (wurde probiert und wieder verworfen).
+  - **Flächen-, Text- und Linienfarben stehen als CSS-Variablen in `:root`** (`--surface`, `--surface-sunken`, `--btn-bg`, `--field-bg`, `--border`, `--divider`, `--text-strong`, `--text-body`, `--text-control`, `--text-muted`, `--text-label`, `--row-*`, `--shadow-card`, `--overlay-bg`). Der Dunkelmodus überschreibt in `body.dark` **nur diese Variablen** — neue Bausteine deshalb mit Variablen statt Hex-Werten gestalten, dann stimmt der Dunkelmodus automatisch.
+  - `--text-label-fixed` ist Absicht: Diese Beschriftungen hatten historisch nie eine dunkle Variante und bleiben in beiden Modi `#94a3b8`.
+  - Diagrammfarben liegen im JS unter `CHART_COLORS`, nicht im CSS.
+- **Tabelle:** Monatliche Gruppen abwechselnd weiß / hellblau via `.month-even` / `.month-odd` (Farben über `--row-even` / `--row-odd`). **Keine Borders** (wurde probiert und wieder verworfen). Die `.month-*`-Regeln müssen im CSS **nach** `tbody tr:hover` stehen — gleiche Spezifität, es entscheidet die Reihenfolge.
 - **KPI-Trend-Badges:** `.good` (grün, positive Entwicklung), `.bad` (rot), `.neutral` (grau). Semantik pro KPI: Ladevorgänge → up=good, Kosten & Ø Preis → down=good.
 - **Tooltips:** Kein Gedankenstrich als Trennlinie. Beträge vertikal untereinander ausgerichtet.
 - **KPI-Zusatzinfos:** In derselben Zeile wie der Wert (via `.kpi-value-row`), NIE als separate Zeile oder eigene Kachel.
