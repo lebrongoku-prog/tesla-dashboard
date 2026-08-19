@@ -69,25 +69,32 @@ Diese Reihenfolge ist zwingend, sonst gibt es 404s auf GitHub Pages oder iOS zei
 ```
 Google Sheet
     ↓ (Sheets API, OAuth-Bearer)
-loadData()
+loadData() → fetchSheet() → rowsToObjects()
     ↓
-parseRows() → allData (Master-State)
+parseRows() → allCharges (Master-State)
     ↓
-Filter (filterMonths / filterYear / navOffset / filterCount)
+Filter (filterMonths / filterYear / periodOffset / monthlyCountFilter)
     ↓
-getFilteredData()
+getVisibleCharges()
     ↓
-renderAll() → renderKPIs, renderCountChart, renderCostChart,
-              renderPriceChart, renderLocChart, renderDayChart,
-              renderHeatmap, renderTable
+renderAll() → renderKpiCards, renderSavingsCard, renderRecordCards,
+              renderCostChart, renderChargeCountChart, renderPriceChart,
+              renderLocationChart, renderWeekdayChart, renderHeatmap,
+              renderPriceInsights, renderYearGrid,
+              renderYearComparisonChart, renderTable
 ```
+
+Bei leerem Zeitraum übernimmt `clearPeriodSections()` das Zurücksetzen.
+Jahresraster und Jahresvergleich hängen bewusst **nicht** am Zeitfilter.
 
 ### Globaler State (Top of Script)
 
-- `allData` — geparste Ladevorgänge, Master. Filter-unabhängig.
-- `filterMonths` (1/3/6/12/null), `filterYear` (Zahl/null), `navOffset` (Monate zurück), `filterCount` (Anzahl-Filter im Count-Chart)
-- `tableSortBy` (`'date' | 'loc' | 'kwh' | 'cost' | 'price' | 'day' | 'time'`), `tableSortDir` (`'asc' | 'desc'`), `tableSearch` (String)
+- `allCharges` — geparste Ladevorgänge, Master. Filter-unabhängig.
+- `filterMonths` (1/3/6/12/null), `filterYear` (Zahl/null), `periodOffset` (Monate zurück), `monthlyCountFilter` (hebt Monate mit genau N Ladungen hervor)
+- `yearGridYear` (Jahr im Jahresraster), `yearComparisonMetric` (`'count' | 'cost' | 'kwh'`)
+- `tableSortBy` (`'date' | 'loc' | 'kwh' | 'cost' | 'price' | 'day' | 'time'`), `tableSortDir` (`'asc' | 'desc'`), `tableSearch` (String), `visibleTableRows` (Basis für die Detailansicht)
 - `charts` — { chartId → Chart.js-Instanz }, wird von `destroyChart` verwaltet.
+- `STORAGE_KEYS` — alle localStorage-Schlüssel an einer Stelle.
 
 ### Datenmodell (ein Ladevorgang)
 
@@ -101,15 +108,23 @@ Spalten aus dem Sheet: `ChargeStartDateTime`, `SiteLocationName`, `QuantityBase`
 
 ### Zentrale Funktionen
 
-- `chf(n, decimals=2)`, `fmtNum(n, decimals=1)` — Zahlen-Formatierung (Swiss `de-CH`)
-- `monthKey`, `fmtMonth`, `fmtDate` — Datums-Helfer
-- `simplifyLoc(loc)` + `fixEncoding(str)` — Standortname säubern, Umlauten fixen (`decodeURIComponent(escape(str))` — deprecated aber funktioniert)
-- `aggregateMonthly(data)` — pro Monat: {label, kwh, cost, count}
-- `getFilteredData()` / `getPreviousPeriodData()` — für aktuellen Zeitraum bzw. Vorperiode (für Trend-Badges)
-- `setTrend(elId, current, previous, downIsGood)` — KPI-Trend-Indikator setzen
-- `destroyChart(id)` — Chart sauber freigeben bevor neu gerendert wird
-- Auth: `initGoogleAuth`, `checkHashToken`, `signIn` — OAuth Implicit Flow, Token in `sessionStorage`
-- Refresh: `triggerRefresh(event)` — ruft Apps Script Web App auf. Token wird per `prompt()` einmalig abgefragt und in `localStorage` gespeichert (Key: `tesla-refresh-token`). **Shift-Klick auf Refresh-Button = Token zurücksetzen.**
+**DOM:** `el(id)`, `setText(id, text)`, `setHtml(id, html)` — ersetzen die früheren ~110 `document.getElementById`-Aufrufe.
+
+**Formatierung:** `formatChf(n, decimals=2)`, `formatNumber(n, decimals=1)`, `formatDate`, `formatMonthLabel`, `formatTime`, `formatDayMonth`, `toMonthKey` (alle `de-CH`).
+
+**Rechnen:** `sumBy`, `sumKwh`, `sumCost`, `average`, `roundTo`, `pricePerKwh(charge)`, `averagePricePerKwh(charges)`, `uniqueYears`.
+
+**Daten:** `parseRows(rows)`, `groupByMonth(charges)` → {key, label, kwh, cost, count}, `shortLocationName` + `repairEncoding` (Umlaute, `decodeURIComponent(escape(str))` — deprecated aber funktioniert).
+
+**Zeitraum:** `getVisibleCharges()`, `getPreviousPeriodCharges()` (Trend-Badges), `getVisibleDateRange()`, `getChargeDateBounds()`, `getMaxPeriodOffset()`, `getPeriodLabel()`, `shiftPeriod(dir)`.
+
+**Chart-Bausteine:** `categoryAxis(fontSize, color)`, `valueAxis(formatTick, extra)`, `countAxis()`, `chartOptions(extra)`, `averageLineDataset(...)`, `highlightColors(...)`, `isDarkMode()`, `chartGridColor()`, `destroyChart(id)`. Diese ersetzen die früher in jedem Diagramm kopierten Achsen- und Farbdefinitionen.
+
+**Rendern:** `renderTrendBadge(elId, current, previous, downIsGood)`, `clearPeriodSections()`. Die drei Diagramme mit Doppelrolle sind aufgeteilt: `renderChargeCountChart` → `renderMonthCalendar` / `renderChargeCountBars`; `renderCostChart` → `renderCostPerChargeChart` / `renderCostPerMonthChart` (+ `buildCostRowsWithForecast` für die Hochrechnung); `renderPriceChart` → `renderPricePerChargeChart` / `renderPricePerMonthChart`.
+
+**Auth:** `initGoogleAuth` → `consumeTokenFromUrl` / `restoreTokenFromSession` → `startDataLoad`; `signIn`. OAuth Implicit Flow, Token in `sessionStorage`.
+
+**Refresh:** `triggerRefresh(event)` — ruft Apps Script Web App auf. Token per `getRefreshToken()` einmalig via `prompt()` abgefragt und in `localStorage` gespeichert (Key: `tesla-refresh-token`). **Shift-Klick auf Refresh-Button = Token zurücksetzen** (`forgetRefreshToken`).
 
 ### Chart.js-Konventionen
 

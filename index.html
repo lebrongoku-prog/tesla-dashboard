@@ -358,9 +358,9 @@
       <span id="yearButtons"></span>
     </div>
     <div class="nav-group">
-      <button class="nav-btn" id="navPrev" onclick="navigate(1)" title="Vorherige Periode">&#8249;</button>
+      <button class="nav-btn" id="navPrev" onclick="shiftPeriod(1)" title="Vorherige Periode">&#8249;</button>
       <div class="nav-label" id="navLabel">–</div>
-      <button class="nav-btn" id="navNext" onclick="navigate(-1)" title="Nächste Periode">&#8250;</button>
+      <button class="nav-btn" id="navNext" onclick="shiftPeriod(-1)" title="Nächste Periode">&#8250;</button>
       <button class="nav-btn" id="navToday" onclick="goToToday()" title="Zum aktuellen Monat" style="font-size:11px;font-weight:600;width:auto;padding:0 9px;">Heute</button>
     </div>
   </div>
@@ -375,7 +375,7 @@
     <div class="kpi-card"><div class="kpi-icon purple">📊</div><div class="kpi-info"><div class="kpi-label">Ø Preis / kWh</div><div class="kpi-value-row"><span class="kpi-value" id="kpiAvgPrice">–</span><span class="kpi-trend hidden" id="kpiAvgPriceTrend"></span></div><div class="kpi-sub" id="kpiAvgPriceSub"></div></div></div>
   </div>
   <div class="charts-row">
-    <div class="chart-card"><div class="chart-header"><div class="chart-title-row"><div class="chart-title" id="countChartTitle">Ladevorgänge pro Monat</div><select id="countFilter" class="count-filter-select" onchange="setCountFilter(this.value)"><option value="">Alle</option></select></div><div class="chart-sub" id="chartCountSub"></div></div><div class="chart-wrap"><canvas id="chartCount"></canvas></div></div>
+    <div class="chart-card"><div class="chart-header"><div class="chart-title-row"><div class="chart-title" id="countChartTitle">Ladevorgänge pro Monat</div><select id="countFilter" class="count-filter-select" onchange="setMonthlyCountFilter(this.value)"><option value="">Alle</option></select></div><div class="chart-sub" id="chartCountSub"></div></div><div class="chart-wrap"><canvas id="chartCount"></canvas></div></div>
     <div class="chart-card"><div class="chart-header"><div class="chart-title">Kosten pro Monat</div><div class="chart-sub" id="chartCostSub"></div></div><div class="chart-wrap"><canvas id="chartCost"></canvas></div></div>
     <div class="chart-card"><div class="chart-header"><div class="chart-title">Ø Preis pro Monat</div><div class="chart-sub" id="chartPriceSub"></div></div><div class="chart-wrap"><canvas id="chartPrice"></canvas></div></div>
   </div>
@@ -387,7 +387,7 @@
     <div class="chart-header">
       <div class="chart-title-row">
         <div class="chart-title">Jahresvergleich</div>
-        <select id="yearCmpMetric" class="count-filter-select" onchange="setYearCmpMetric(this.value)">
+        <select id="yearCmpMetric" class="count-filter-select" onchange="setYearComparisonMetric(this.value)">
           <option value="count">Ladevorgänge</option>
           <option value="cost">Kosten</option>
           <option value="kwh">Energie</option>
@@ -426,9 +426,9 @@
     </div>
     <div class="savings-settings">
       <span>Verglichen mit einem Benziner mit</span>
-      <input type="number" id="benzinL100" class="savings-input" step="0.1" min="1" max="30" onchange="saveBenzinSettings()">
+      <input type="number" id="benzinL100" class="savings-input" step="0.1" min="1" max="30" onchange="savePetrolSettings()">
       <span>l / 100 km bei CHF</span>
-      <input type="number" id="benzinPreis" class="savings-input" step="0.05" min="0.5" max="5" onchange="saveBenzinSettings()">
+      <input type="number" id="benzinPreis" class="savings-input" step="0.05" min="0.5" max="5" onchange="savePetrolSettings()">
       <span>/ Liter</span>
     </div>
   </div>
@@ -460,7 +460,7 @@
     </div>
   </div>
 </div>
-<div class="detail-overlay" id="detailOverlay" onclick="closeDetail(event)">
+<div class="detail-overlay" id="detailOverlay" onclick="closeDetail()">
   <div class="detail-card" onclick="event.stopPropagation()">
     <div class="detail-head">
       <div>
@@ -478,47 +478,165 @@
   </div>
 </div>
 <script>
+// ═══════════════════════════════════════════════════════════════════
+//  Tesla Ladehistorie – Dashboard
+//  Datenquelle: Google Sheet (Sheets API, OAuth Implicit Flow)
+// ═══════════════════════════════════════════════════════════════════
+
+// ── Konfiguration ──────────────────────────────────────────────────
 const SHEET_ID = '1YC4EyDAhOa-eJod_JU5afc48IRUb5A0kMcgoiWLROnc';
-const CLIENT_ID = '49501547672-sc1ga0lcq200h4iuij33c7n4kf65gpra.apps.googleusercontent.com'; // ← hier eintragen
+const CLIENT_ID = '49501547672-sc1ga0lcq200h4iuij33c7n4kf65gpra.apps.googleusercontent.com';
+const REDIRECT_URI = 'https://lebrongoku-prog.github.io/tesla-dashboard/';
+const REFRESH_ENDPOINT = 'https://script.google.com/macros/s/AKfycbzplDQKzviFvZkT-mb8xChF-9AN3Eu15mMC-et_JSFyhRHPCEw-2F7oYgW0ehwQGvJzJw/exec';
+
+const STORAGE_KEYS = {
+  odometer: 'tesla-odometer',
+  theme: 'tesla-dash-theme',
+  refreshToken: 'tesla-refresh-token',
+  petrolConsumption: 'tesla-benzin-l100',
+  petrolPrice: 'tesla-benzin-preis'
+};
+
+// Annahmen für den Vergleich mit einem Verbrenner
+const PETROL_DEFAULT_CONSUMPTION = 7.0;   // l / 100 km
+const PETROL_DEFAULT_PRICE = 1.80;        // CHF / l
+const EV_KWH_PER_100KM = 18;              // nur als Notbehelf, wenn kein Km-Stand hinterlegt ist
+const CO2_KG_PER_PETROL_LITRE = 2.33;
+const CO2_KG_PER_KWH = 0.128;             // Schweizer Verbrauchermix
+const CO2_KG_PER_TREE_YEAR = 22;
+
+const WEEKDAYS = ['Mo','Di','Mi','Do','Fr','Sa','So'];
+const WEEKDAYS_LONG = ['Montag','Dienstag','Mittwoch','Donnerstag','Freitag','Samstag','Sonntag'];
+const MONTHS_SHORT = ['Jan','Feb','Mär','Apr','Mai','Jun','Jul','Aug','Sep','Okt','Nov','Dez'];
+const COLORS = ['#3b82f6','#22c55e','#a855f7','#f97316','#06b6d4','#ef4444','#eab308','#ec4899','#14b8a6','#8b5cf6'];
+
+const CHART_COLORS = { count: '#06b6d4', cost: '#22c55e', price: '#a855f7', weekday: '#3b82f6', average: '#f97316' };
+
+// ── Zustand ────────────────────────────────────────────────────────
 let accessToken = null;
 let tokenExpiry = 0;
-let allData = [];
-let filterMonths = null;
+let allCharges = [];               // alle geparsten Ladevorgänge, filterunabhängig
+let charts = {};                   // chartId -> Chart.js-Instanz, verwaltet über destroyChart
+
+// Zeitraumfilter: entweder eine Monatszahl oder ein Jahr, nie beides
+let filterMonths = null;           // 1 | 3 | 6 | 12 | null (= alle)
 let filterYear = null;
-let navOffset = 0;
-let filterCount = null;
-let charts = {};
+let periodOffset = 0;              // wie viele Monate der Zeitraum zurückgeschoben ist
+let monthlyCountFilter = null;     // hebt Monate mit genau dieser Anzahl Ladungen hervor
+
+let yearGridYear = null;           // im Jahresraster gewähltes Jahr
+let yearComparisonMetric = 'count';
+
 let tableSortBy = 'date';
 let tableSortDir = 'desc';
 let tableSearch = '';
-let yearGridYear = null;
-let yearCmpMetric = 'count';
-let tableRendered = [];
+let visibleTableRows = [];         // aktuell gerenderte Zeilen, Basis für die Detailansicht
 
-// Annahmen für den Verbrenner-Vergleich
-const BENZIN_DEFAULT_L100 = 7.0;      // l / 100 km
-const BENZIN_DEFAULT_PREIS = 1.80;    // CHF / l
-const STROM_KWH_100KM = 18;           // Fallback, falls kein Km-Stand hinterlegt ist
-const CO2_BENZIN_KG_PRO_L = 2.33;     // kg CO₂ je Liter Benzin
-const CO2_STROM_KG_PRO_KWH = 0.128;   // kg CO₂ je kWh, Schweizer Verbrauchermix
-const CO2_BAUM_KG_PRO_JAHR = 22;      // kg CO₂, die ein Baum pro Jahr bindet
+// ── DOM-Kurzhelfer ─────────────────────────────────────────────────
+function el(id) { return document.getElementById(id); }
+function setText(id, text) { const node = el(id); if (node) node.textContent = text; }
+function setHtml(id, html) { const node = el(id); if (node) node.innerHTML = html; }
 
+// ── Formatierung ───────────────────────────────────────────────────
+function formatChf(value, decimals) {
+  return formatNumber(value, decimals === undefined ? 2 : decimals);
+}
+function formatNumber(value, decimals) {
+  if (decimals === undefined) decimals = 1;
+  if (isNaN(value)) return '–';
+  return value.toLocaleString('de-CH', { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+}
+function formatDate(date) { return date.toLocaleDateString('de-CH', { day: '2-digit', month: '2-digit', year: 'numeric' }); }
+function formatMonthLabel(date) { return date.toLocaleDateString('de-CH', { month: 'short', year: '2-digit' }); }
+function formatTime(date) { return date.toLocaleTimeString('de-CH', { hour: '2-digit', minute: '2-digit' }); }
+function formatDayMonth(date) {
+  const pad = n => String(n).padStart(2, '0');
+  return pad(date.getDate()) + '.' + pad(date.getMonth() + 1) + '.';
+}
+function toMonthKey(date) { return date.getFullYear() + '-' + String(date.getMonth() + 1).padStart(2, '0'); }
+
+// Umlaute aus dem Tesla-Export kommen doppelt kodiert an; escape/unescape ist
+// zwar veraltet, stellt sie hier aber zuverlässig wieder her.
+function repairEncoding(text) {
+  try { return decodeURIComponent(escape(text)); } catch (e) { return text; }
+}
+function shortLocationName(rawName) { return repairEncoding((rawName || 'Unbekannt').split(',')[0].trim()); }
+
+// ── Rechenhelfer ───────────────────────────────────────────────────
+function sumBy(items, pick) { return items.reduce((total, item) => total + pick(item), 0); }
+function sumKwh(charges) { return sumBy(charges, c => c.kwh); }
+function sumCost(charges) { return sumBy(charges, c => c.total); }
+function average(values) { return values.length ? values.reduce((a, b) => a + b, 0) / values.length : 0; }
+function roundTo(value, decimals) { return parseFloat(value.toFixed(decimals)); }
+function pricePerKwh(charge) { return charge.kwh > 0 ? charge.total / charge.kwh : 0; }
+function averagePricePerKwh(charges) {
+  const kwh = sumKwh(charges);
+  return kwh > 0 ? sumCost(charges) / kwh : 0;
+}
+function uniqueYears(charges) {
+  return Array.from(new Set(charges.map(c => c.year))).sort();
+}
+
+// ── Chart-Bausteine ────────────────────────────────────────────────
+function isDarkMode() { return document.body.classList.contains('dark'); }
+function chartGridColor() { return isDarkMode() ? '#334155' : '#f1f5f9'; }
+function destroyChart(id) {
+  if (charts[id]) { charts[id].destroy(); delete charts[id]; }
+}
+
+// Beschriftungsachse (Monate, Datumsangaben, Wochentage)
+function categoryAxis(fontSize, color) {
+  return { grid: { display: false }, ticks: { font: { size: fontSize || 10 }, color: color || '#94a3b8' } };
+}
+// Werteachse; formatTick bestimmt die Beschriftung, extra überschreibt einzelne Optionen
+function valueAxis(formatTick, extra) {
+  const axis = {
+    grid: { color: chartGridColor() },
+    ticks: { font: { size: 10 }, color: '#94a3b8' },
+    beginAtZero: true
+  };
+  if (formatTick) axis.ticks.callback = formatTick;
+  return Object.assign(axis, extra || {});
+}
+// Ganzzahlige Achse ohne Zwischenschritte – für Stückzahlen
+function countAxis() {
+  const axis = valueAxis(value => Number.isInteger(value) ? value : null);
+  axis.ticks.stepSize = 1;
+  axis.ticks.precision = 0;
+  return axis;
+}
+function chartOptions(extra) {
+  return Object.assign({
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: { legend: { display: false } }
+  }, extra || {});
+}
+// Gestrichelte Durchschnittslinie, die in mehreren Diagrammen auftaucht
+function averageLineDataset(value, pointCount, color) {
+  return {
+    type: 'line', data: new Array(pointCount).fill(value), borderColor: color,
+    borderWidth: 2, borderDash: [5, 4], pointRadius: 0, fill: false, tension: 0, topLabel: false, order: 1
+  };
+}
+
+// Zeichnet Zahlen über die Balken. ds.topLabel = false schaltet es pro Datenreihe ab,
+// ds.topLabelFmt(wert, index) bestimmt den Text.
 const topLabelPlugin = {
   id: 'topLabel',
   afterDatasetsDraw(chart) {
     const { ctx } = chart;
     chart.data.datasets.forEach((ds, i) => {
-      const meta = chart.getDatasetMeta(i);
-      if (meta.type !== 'bar' || ds.topLabel === false) return;
-      meta.data.forEach((bar, j) => {
-        const val = ds.data[j];
-        if (!val) return;
+      if (chart.getDatasetMeta(i).type !== 'bar' || ds.topLabel === false) return;
+      chart.getDatasetMeta(i).data.forEach((bar, j) => {
+        const value = ds.data[j];
+        if (!value) return;
         ctx.save();
         ctx.font = '10px -apple-system,sans-serif';
-        ctx.fillStyle = document.body.classList.contains('dark') ? '#cbd5e1' : '#64748b';
+        ctx.fillStyle = isDarkMode() ? '#cbd5e1' : '#64748b';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'bottom';
-        ctx.fillText(ds.topLabelFmt ? ds.topLabelFmt(val, j) : val, bar.x, bar.y - 3);
+        ctx.fillText(ds.topLabelFmt ? ds.topLabelFmt(value, j) : value, bar.x, bar.y - 3);
         ctx.restore();
       });
     });
@@ -526,187 +644,192 @@ const topLabelPlugin = {
 };
 Chart.register(topLabelPlugin);
 
-function chf(n, decimals) {
-  if (decimals === undefined) decimals = 2;
-  if (isNaN(n)) return '–';
-  return n.toLocaleString('de-CH', {minimumFractionDigits: decimals, maximumFractionDigits: decimals});
-}
-function fmtNum(n, decimals) {
-  if (decimals === undefined) decimals = 1;
-  if (isNaN(n)) return '–';
-  return n.toLocaleString('de-CH', {minimumFractionDigits: decimals, maximumFractionDigits: decimals});
-}
-function monthKey(d) { return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0'); }
-function fmtMonth(d) { return d.toLocaleDateString('de-CH', { month: 'short', year: '2-digit' }); }
-function fmtDate(d) { return d.toLocaleDateString('de-CH', { day: '2-digit', month: '2-digit', year: 'numeric' }); }
-var WEEKDAYS = ['Mo','Di','Mi','Do','Fr','Sa','So'];
-var WEEKDAYS_LONG = ['Montag','Dienstag','Mittwoch','Donnerstag','Freitag','Samstag','Sonntag'];
-var MONTHS_SHORT = ['Jan','Feb','Mär','Apr','Mai','Jun','Jul','Aug','Sep','Okt','Nov','Dez'];
-var COLORS = ['#3b82f6','#22c55e','#a855f7','#f97316','#06b6d4','#ef4444','#eab308','#ec4899','#14b8a6','#8b5cf6'];
+// ═══ Anmeldung ═════════════════════════════════════════════════════
+// Redirect-Flow statt Popup, damit es auch in Safari und auf dem iPhone funktioniert.
 
-function fixEncoding(str) {
-  try { return decodeURIComponent(escape(str)); } catch(e) { return str; }
-}
-function simplifyLoc(loc) { return fixEncoding((loc || 'Unbekannt').split(',')[0].trim()); }
-
-// Google Auth – Redirect Flow (Safari & Mobile kompatibel, kein Popup)
 function initGoogleAuth() {
-  // 1. Token im URL-Hash nach Google-Redirect?
-  if (checkHashToken()) return;
-  // 2. Noch gültiger Token in sessionStorage?
-  try {
-    var t = sessionStorage.getItem('g_token'), exp = parseInt(sessionStorage.getItem('g_expiry') || '0');
-    if (t && Date.now() < exp) {
-      accessToken = t; tokenExpiry = exp;
-      document.getElementById('signinOverlay').style.display = 'none';
-      document.getElementById('loadingOverlay').style.display = 'flex';
-      loadData(); return;
-    }
-  } catch(_) {}
-  // 3. Anmeldung erforderlich – Overlay bleibt sichtbar
+  if (consumeTokenFromUrl()) return;
+  if (restoreTokenFromSession()) return;
+  // sonst bleibt das Anmelde-Overlay stehen
 }
-function checkHashToken() {
-  var hash = window.location.hash;
+
+function startDataLoad() {
+  el('signinOverlay').style.display = 'none';
+  el('loadingOverlay').style.display = 'flex';
+  loadData();
+}
+
+// Nach dem Google-Redirect steht der Token im URL-Hash
+function consumeTokenFromUrl() {
+  const hash = window.location.hash;
   if (!hash || !hash.includes('access_token')) return false;
-  var params = new URLSearchParams(hash.substring(1));
-  var token = params.get('access_token');
-  var expiresIn = parseInt(params.get('expires_in') || '3600');
+  const params = new URLSearchParams(hash.substring(1));
+  const token = params.get('access_token');
   if (!token) return false;
+  const expiresIn = parseInt(params.get('expires_in') || '3600');
   accessToken = token;
   tokenExpiry = Date.now() + (expiresIn - 60) * 1000;
-  try { sessionStorage.setItem('g_token', accessToken); sessionStorage.setItem('g_expiry', String(tokenExpiry)); } catch(_) {}
+  try {
+    sessionStorage.setItem('g_token', accessToken);
+    sessionStorage.setItem('g_expiry', String(tokenExpiry));
+  } catch (_) {}
   history.replaceState(null, '', location.pathname + location.search);
-  document.getElementById('signinOverlay').style.display = 'none';
-  document.getElementById('loadingOverlay').style.display = 'flex';
-  loadData();
+  startDataLoad();
   return true;
 }
+
+function restoreTokenFromSession() {
+  try {
+    const token = sessionStorage.getItem('g_token');
+    const expiry = parseInt(sessionStorage.getItem('g_expiry') || '0');
+    if (!token || Date.now() >= expiry) return false;
+    accessToken = token;
+    tokenExpiry = expiry;
+    startDataLoad();
+    return true;
+  } catch (_) { return false; }
+}
+
 function signIn() {
-  var redirectUri = 'https://lebrongoku-prog.github.io/tesla-dashboard/';
   location.href = 'https://accounts.google.com/o/oauth2/v2/auth' +
     '?client_id=' + encodeURIComponent(CLIENT_ID) +
-    '&redirect_uri=' + encodeURIComponent(redirectUri) +
+    '&redirect_uri=' + encodeURIComponent(REDIRECT_URI) +
     '&response_type=token' +
     '&scope=' + encodeURIComponent('https://www.googleapis.com/auth/spreadsheets.readonly') +
     '&prompt=select_account';
 }
-function showAuthError(msg) {
-  document.getElementById('signinOverlay').style.display = 'none';
-  var c = document.getElementById('errorCard'); c.style.display = 'block';
-  c.innerHTML = '<strong>⚠️ ' + msg + '</strong>';
-}
-function getToken(cb) {
-  if (accessToken && Date.now() < tokenExpiry) { cb(accessToken); return; }
-  signIn();
-}
+
+// ═══ Daten laden ═══════════════════════════════════════════════════
 
 function parseRows(rows) {
-  return rows.map(function(r) {
-    var date = new Date(r.ChargeStartDateTime);
+  return rows.map(row => {
+    const date = new Date(row.ChargeStartDateTime);
     if (!date || isNaN(date)) return null;
-    var kwh   = parseFloat(r.QuantityBase) || 0;
-    var price = parseFloat(r.UnitCostBase) || 0;
-    var total = parseFloat(r['Total Inc. VAT']) || 0;
-    var loc   = simplifyLoc(r.SiteLocationName || 'Unbekannt');
-    var dayIdx = (date.getDay() + 6) % 7;
-    var hour  = date.getHours();
-    return { date: date, year: date.getFullYear(), monthKey: monthKey(date), monthLabel: fmtMonth(date), loc: loc, kwh: kwh, price: price, total: total, dayIdx: dayIdx, hour: hour };
+    return {
+      date: date,
+      year: date.getFullYear(),
+      monthKey: toMonthKey(date),
+      monthLabel: formatMonthLabel(date),
+      loc: shortLocationName(row.SiteLocationName || 'Unbekannt'),
+      kwh: parseFloat(row.QuantityBase) || 0,
+      price: parseFloat(row.UnitCostBase) || 0,
+      total: parseFloat(row['Total Inc. VAT']) || 0,
+      dayIdx: (date.getDay() + 6) % 7,   // 0 = Montag
+      hour: date.getHours()
+    };
   }).filter(Boolean);
 }
 
-function getDateRange() {
-  if (!allData.length) return { start: null, end: null };
-  if (filterMonths === null) return { start: null, end: null };
-  var dates = allData.map(function(r){return r.date;});
-  var maxDate = new Date(Math.max.apply(null, dates));
-  var endYear = maxDate.getFullYear();
-  var endMonth = maxDate.getMonth();
-  // navOffset steps 1 month at a time regardless of filterMonths
-  endMonth -= navOffset;
+async function fetchSheet(path) {
+  const response = await fetch('https://sheets.googleapis.com/v4/spreadsheets/' + SHEET_ID + path,
+    { headers: { 'Authorization': 'Bearer ' + accessToken } });
+  if (response.status === 401) { accessToken = null; return null; }
+  if (!response.ok) throw new Error('Sheets API Fehler ' + response.status + ': ' + await response.text());
+  return response.json();
+}
+
+// Wandelt die Zeilenmatrix des Sheets in Objekte mit Spaltennamen als Schlüssel
+function rowsToObjects(values) {
+  const headers = values[0];
+  return values.slice(1)
+    .map(row => {
+      const obj = {};
+      headers.forEach((header, i) => { obj[header.trim()] = (row[i] || '').trim(); });
+      return obj;
+    })
+    .filter(obj => Object.keys(obj).length > 1);
+}
+
+async function loadData() {
+  try {
+    const meta = await fetchSheet('?fields=sheets.properties.title');
+    if (!meta) { showSignIn(); return; }
+    const sheetName = meta.sheets[0].properties.title;
+
+    const values = await fetchSheet('/values/' + encodeURIComponent(sheetName));
+    if (!values) { showSignIn(); return; }
+    if (!values.values || values.values.length < 2) throw new Error('Keine Daten im Sheet gefunden.');
+
+    const rows = rowsToObjects(values.values);
+    allCharges = parseRows(rows);
+    if (!allCharges.length) throw new Error('Keine gültigen Einträge gefunden. Zeilen im Sheet: ' + rows.length);
+
+    el('statusBadge').style.display = 'flex';
+    setText('statusText', allCharges.length + ' Einträge');
+    renderYearButtons();
+    updateNav();
+    renderAll();
+    el('loadingOverlay').style.display = 'none';
+  } catch (err) {
+    el('loadingOverlay').style.display = 'none';
+    const card = el('errorCard');
+    card.style.display = 'block';
+    card.innerHTML = '<strong>⚠️ Fehler beim Laden der Daten</strong><pre>' + err.message + '</pre>';
+  }
+}
+
+function showSignIn() {
+  el('loadingOverlay').style.display = 'none';
+  el('signinOverlay').style.display = 'flex';
+}
+
+// ═══ Zeitraumfilter und Navigation ═════════════════════════════════
+
+function getChargeDateBounds() {
+  const times = allCharges.map(c => c.date.getTime());
+  return { first: new Date(Math.min.apply(null, times)), last: new Date(Math.max.apply(null, times)) };
+}
+
+// Sichtbarer Zeitraum bei Monatsfilter; bei "Alle" und Jahresfilter offen (null)
+function getVisibleDateRange() {
+  if (!allCharges.length || filterMonths === null) return { start: null, end: null };
+  const last = getChargeDateBounds().last;
+  let endYear = last.getFullYear();
+  let endMonth = last.getMonth() - periodOffset;   // Navigation schiebt immer monatsweise
   while (endMonth < 0) { endMonth += 12; endYear--; }
   while (endMonth > 11) { endMonth -= 12; endYear++; }
-  var end = new Date(endYear, endMonth + 1, 0, 23, 59, 59);
-  var startYear = endYear, startMonth = endMonth - filterMonths + 1;
+
+  let startYear = endYear;
+  let startMonth = endMonth - filterMonths + 1;
   while (startMonth < 0) { startMonth += 12; startYear--; }
-  var start = new Date(startYear, startMonth, 1);
-  return { start: start, end: end };
+
+  return {
+    start: new Date(startYear, startMonth, 1),
+    end: new Date(endYear, endMonth + 1, 0, 23, 59, 59)
+  };
 }
 
-function getFilteredData() {
-  if (filterYear !== null) return allData.filter(function(r){ return r.year === filterYear; });
-  if (filterMonths === null) return allData;
-  var range = getDateRange();
-  if (!range.start || !range.end) return allData;
-  return allData.filter(function(r){ return r.date >= range.start && r.date <= range.end; });
+function chargesWithin(start, end) {
+  return allCharges.filter(c => c.date >= start && c.date <= end);
 }
 
-function getPreviousPeriodData() {
-  if (filterYear !== null) {
-    return allData.filter(function(r){ return r.year === filterYear - 1; });
-  }
+function getVisibleCharges() {
+  if (filterYear !== null) return allCharges.filter(c => c.year === filterYear);
+  if (filterMonths === null) return allCharges;
+  const range = getVisibleDateRange();
+  if (!range.start || !range.end) return allCharges;
+  return chargesWithin(range.start, range.end);
+}
+
+// Gleich langer Zeitraum davor – Basis für die Trendpfeile
+function getPreviousPeriodCharges() {
+  if (filterYear !== null) return allCharges.filter(c => c.year === filterYear - 1);
   if (filterMonths === null) return null;
-  var range = getDateRange();
+  const range = getVisibleDateRange();
   if (!range.start || !range.end) return null;
-  var prevEnd = new Date(range.start.getFullYear(), range.start.getMonth(), 0, 23, 59, 59); // letzter Tag des Vormonats
-  var prevStartYear = prevEnd.getFullYear(), prevStartMonth = prevEnd.getMonth() - filterMonths + 1;
+  const prevEnd = new Date(range.start.getFullYear(), range.start.getMonth(), 0, 23, 59, 59);
+  let prevStartYear = prevEnd.getFullYear();
+  let prevStartMonth = prevEnd.getMonth() - filterMonths + 1;
   while (prevStartMonth < 0) { prevStartMonth += 12; prevStartYear--; }
-  var prevStart = new Date(prevStartYear, prevStartMonth, 1);
-  return allData.filter(function(r){ return r.date >= prevStart && r.date <= prevEnd; });
-}
-
-function setTrend(elId, current, previous, downIsGood) {
-  var el = document.getElementById(elId);
-  if (!el) return;
-  if (previous == null || previous === 0 || current == null || isNaN(current) || isNaN(previous)) {
-    el.className = 'kpi-trend hidden';
-    el.textContent = '';
-    return;
-  }
-  var pct = ((current - previous) / previous) * 100;
-  var sign = pct > 0 ? '↑' : (pct < 0 ? '↓' : '→');
-  var abs = Math.abs(pct);
-  var pctStr = abs < 10 ? abs.toFixed(1) : abs.toFixed(0);
-  el.textContent = sign + ' ' + pctStr + '%';
-  el.title = 'gegenüber Vorzeitraum';
-  if (abs < 0.5) {
-    el.className = 'kpi-trend neutral';
-  } else {
-    var isImprovement = downIsGood ? (pct < 0) : (pct > 0);
-    el.className = 'kpi-trend ' + (isImprovement ? 'good' : 'bad');
-  }
-}
-
-function getMaxNavOffset() {
-  if (filterMonths === null || !allData.length) return 0;
-  var dates = allData.map(function(r){return r.date;});
-  var maxDate = new Date(Math.max.apply(null, dates));
-  var minDate = new Date(Math.min.apply(null, dates));
-  var totalMonths = (maxDate.getFullYear() - minDate.getFullYear()) * 12 + (maxDate.getMonth() - minDate.getMonth());
-  // Max offset = total span minus the window size (so window never goes before first data)
-  return Math.max(0, totalMonths - filterMonths + 1);
-}
-
-function getNavLabel() {
-  if (filterYear !== null) return String(filterYear);
-  if (filterMonths === null) {
-    if (!allData.length) return 'Alle Daten';
-    var dates = allData.map(function(r){return r.date;});
-    var min = new Date(Math.min.apply(null, dates));
-    var max = new Date(Math.max.apply(null, dates));
-    return fmtDate(min) + ' – ' + fmtDate(max);
-  }
-  var range = getDateRange();
-  if (!range.start || !range.end) return '–';
-  if (filterMonths === 1) return range.end.toLocaleDateString('de-CH', { month: 'long', year: 'numeric' });
-  return range.start.toLocaleDateString('de-CH', {month:'short', year:'numeric'}) + ' – ' + range.end.toLocaleDateString('de-CH', {month:'short', year:'numeric'});
+  return chargesWithin(new Date(prevStartYear, prevStartMonth, 1), prevEnd);
 }
 
 function setFilter(months) {
   filterMonths = months;
   filterYear = null;
-  navOffset = 0;
-  document.querySelectorAll('.filter-btn').forEach(function(b){
-    b.classList.toggle('active', b.dataset.months == (months === null ? 'null' : months));
+  periodOffset = 0;
+  document.querySelectorAll('.filter-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.months == (months === null ? 'null' : months));
   });
   updateNav();
   renderAll();
@@ -715,1101 +838,1197 @@ function setFilter(months) {
 function setFilterYear(year) {
   filterYear = year;
   filterMonths = null;
-  navOffset = 0;
-  document.querySelectorAll('.filter-btn').forEach(function(b){
-    b.classList.toggle('active', b.dataset.year == year);
+  periodOffset = 0;
+  document.querySelectorAll('.filter-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.year == year);
   });
   updateNav();
   renderAll();
 }
 
 function renderYearButtons() {
-  if (!allData.length) return;
-  var years = Array.from(new Set(allData.map(function(r){ return r.year; }))).sort();
-  var container = document.getElementById('yearButtons');
-  var divider = document.getElementById('yearDivider');
-  if (years.length === 0) { container.innerHTML = ''; divider.style.display = 'none'; return; }
+  if (!allCharges.length) return;
+  const years = uniqueYears(allCharges);
+  const divider = el('yearDivider');
+  if (!years.length) { setHtml('yearButtons', ''); divider.style.display = 'none'; return; }
   divider.style.display = '';
-  container.innerHTML = years.map(function(y){
-    return '<button class="filter-btn" data-year="' + y + '" onclick="setFilterYear(' + y + ')">' + y + '</button>';
-  }).join('');
+  setHtml('yearButtons', years.map(year =>
+    '<button class="filter-btn" data-year="' + year + '" onclick="setFilterYear(' + year + ')">' + year + '</button>'
+  ).join(''));
 }
 
-function setCountFilter(val) {
-  filterCount = val === '' ? null : parseInt(val);
-  var data = getFilteredData();
-  if (!data.length) return;
-  renderCountChart(data);
-  renderCostChart(data);
-  renderPriceChart(data);
+function setMonthlyCountFilter(value) {
+  monthlyCountFilter = value === '' ? null : parseInt(value);
+  const charges = getVisibleCharges();
+  if (!charges.length) return;
+  renderChargeCountChart(charges);
+  renderCostChart(charges);
+  renderPriceChart(charges);
 }
 
-function navigate(dir) {
-  navOffset += dir;
-  var maxOff = getMaxNavOffset();
-  if (navOffset < 0) navOffset = 0;
-  if (navOffset > maxOff) navOffset = maxOff;
+// Grenze, ab der die Navigation vor dem ersten Datensatz landen würde
+function getMaxPeriodOffset() {
+  if (filterMonths === null || !allCharges.length) return 0;
+  const bounds = getChargeDateBounds();
+  const spanInMonths = (bounds.last.getFullYear() - bounds.first.getFullYear()) * 12
+    + (bounds.last.getMonth() - bounds.first.getMonth());
+  return Math.max(0, spanInMonths - filterMonths + 1);
+}
+
+function shiftPeriod(direction) {
+  periodOffset = Math.min(Math.max(periodOffset + direction, 0), getMaxPeriodOffset());
   updateNav();
   renderAll();
 }
 
 function goToToday() {
-  navOffset = 0;
+  periodOffset = 0;
   updateNav();
   renderAll();
 }
 
+function getPeriodLabel() {
+  if (filterYear !== null) return String(filterYear);
+  if (filterMonths === null) {
+    if (!allCharges.length) return 'Alle Daten';
+    const bounds = getChargeDateBounds();
+    return formatDate(bounds.first) + ' – ' + formatDate(bounds.last);
+  }
+  const range = getVisibleDateRange();
+  if (!range.start || !range.end) return '–';
+  if (filterMonths === 1) return range.end.toLocaleDateString('de-CH', { month: 'long', year: 'numeric' });
+  return range.start.toLocaleDateString('de-CH', { month: 'short', year: 'numeric' })
+    + ' – ' + range.end.toLocaleDateString('de-CH', { month: 'short', year: 'numeric' });
+}
+
 function updateNav() {
-  document.getElementById('navLabel').textContent = getNavLabel();
-  var maxOff = getMaxNavOffset();
-  var yearMode = filterYear !== null;
-  document.getElementById('navPrev').disabled = (yearMode || filterMonths === null || navOffset >= maxOff);
-  document.getElementById('navNext').disabled = (yearMode || filterMonths === null || navOffset <= 0);
-  document.getElementById('navToday').disabled = (yearMode || filterMonths === null || navOffset <= 0);
+  setText('navLabel', getPeriodLabel());
+  const navigationLocked = filterYear !== null || filterMonths === null;
+  el('navPrev').disabled = navigationLocked || periodOffset >= getMaxPeriodOffset();
+  el('navNext').disabled = navigationLocked || periodOffset <= 0;
+  el('navToday').disabled = navigationLocked || periodOffset <= 0;
 }
 
-function destroyChart(id) {
-  if (charts[id]) { charts[id].destroy(); delete charts[id]; }
-}
+// ═══ Rendern: Steuerung ════════════════════════════════════════════
 
-function aggregateMonthly(data) {
-  var map = {};
-  data.forEach(function(r) {
-    if (!map[r.monthKey]) map[r.monthKey] = { label: r.monthLabel, kwh: 0, cost: 0, count: 0 };
-    map[r.monthKey].kwh += r.kwh;
-    map[r.monthKey].cost += r.total;
-    map[r.monthKey].count++;
+function groupByMonth(charges) {
+  const months = {};
+  charges.forEach(charge => {
+    if (!months[charge.monthKey]) months[charge.monthKey] = { label: charge.monthLabel, kwh: 0, cost: 0, count: 0 };
+    months[charge.monthKey].kwh += charge.kwh;
+    months[charge.monthKey].cost += charge.total;
+    months[charge.monthKey].count++;
   });
-  return Object.entries(map).sort(function(a,b){return a[0].localeCompare(b[0]);}).map(function(e){ return Object.assign({key:e[0]},e[1]); });
+  return Object.entries(months)
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .map(entry => Object.assign({ key: entry[0] }, entry[1]));
 }
 
 function renderAll() {
-  var data = getFilteredData();
-  var emptyBanner = document.getElementById('emptyBanner');
-  if (!data.length) {
-    // KPIs leeren
-    document.getElementById('kpiCount').textContent = '0';
-    document.getElementById('kpiCountSub').textContent = '';
-    document.getElementById('kpiCost').textContent = 'CHF 0';
-    document.getElementById('kpiCostSub').textContent = '';
-    document.getElementById('kpiAvgPrice').textContent = '–';
-    document.getElementById('kpiAvgPriceSub').textContent = '';
-    setTrend('kpiCountTrend', null, null);
-    setTrend('kpiCostTrend', null, null);
-    setTrend('kpiAvgPriceTrend', null, null);
-    // Charts zerstören
-    ['count','cost','price','loc','day'].forEach(destroyChart);
-    var cal = document.getElementById('countCalendar');
-    if (cal) cal.remove();
-    // Neue Bereiche leeren
-    document.getElementById('savingsValue').textContent = '–';
-    document.getElementById('savingsSub').textContent = '';
-    document.getElementById('savingsFuel').textContent = '–';
-    document.getElementById('savingsCo2').textContent = '–';
-    document.getElementById('savingsTrees').textContent = '–';
-    document.getElementById('recordsGrid').innerHTML = '<div class="empty-state" style="grid-column:1/-1"><div class="empty-state-icon">🏆</div>Keine Rekorde in diesem Zeitraum</div>';
-    document.getElementById('recordsSub').textContent = '';
-    document.getElementById('insightRow').style.display = 'none';
-    document.getElementById('heatmapContainer').innerHTML = '<div class="empty-state"><div class="empty-state-icon">📊</div>Keine Daten in diesem Zeitraum</div>';
-    document.getElementById('locLegend').innerHTML = '';
-    document.getElementById('chartCountSub').textContent = '';
-    document.getElementById('chartCostSub').textContent = '';
-    document.getElementById('chartPriceSub').textContent = '';
-    document.getElementById('chartDaySub').textContent = '';
-    document.getElementById('chartLocSub').textContent = '';
-    if (emptyBanner) emptyBanner.style.display = 'block';
-    // Jahresraster und Jahresvergleich zeigen immer alle Daten, unabhängig vom Zeitfilter
-    renderYearGrid();
-    renderYearCmp();
-    renderTable([]);
+  const charges = getVisibleCharges();
+  el('emptyBanner').style.display = charges.length ? 'none' : 'block';
+
+  if (charges.length) {
+    renderKpiCards(charges);
+    renderSavingsCard(charges);
+    renderRecordCards(charges);
+    renderCostChart(charges);
+    renderChargeCountChart(charges);
+    renderPriceChart(charges);
+    renderLocationChart(charges);
+    renderWeekdayChart(charges);
+    renderHeatmap(charges);
+    renderPriceInsights(charges);
+  } else {
+    clearPeriodSections();
+  }
+
+  // Jahresraster und Jahresvergleich zeigen bewusst immer alle Daten
+  renderYearGrid();
+  renderYearComparisonChart();
+  renderTable(charges);
+}
+
+// Setzt alle Bereiche zurück, die vom gewählten Zeitraum abhängen
+function clearPeriodSections() {
+  setText('kpiCount', '0');
+  setText('kpiCost', 'CHF 0');
+  setText('kpiAvgPrice', '–');
+  ['kpiCountSub','kpiCostSub','kpiAvgPriceSub','recordsSub','chartCountSub','chartCostSub',
+   'chartPriceSub','chartDaySub','chartLocSub','savingsSub'].forEach(id => setText(id, ''));
+  ['kpiCountTrend','kpiCostTrend','kpiAvgPriceTrend'].forEach(id => renderTrendBadge(id, null, null));
+  ['savingsValue','savingsFuel','savingsCo2','savingsTrees'].forEach(id => setText(id, '–'));
+
+  ['count','cost','price','loc','day'].forEach(destroyChart);
+  const calendar = el('countCalendar');
+  if (calendar) calendar.remove();
+
+  setHtml('recordsGrid', '<div class="empty-state" style="grid-column:1/-1"><div class="empty-state-icon">🏆</div>Keine Rekorde in diesem Zeitraum</div>');
+  setHtml('heatmapContainer', '<div class="empty-state"><div class="empty-state-icon">📊</div>Keine Daten in diesem Zeitraum</div>');
+  setHtml('locLegend', '');
+  el('insightRow').style.display = 'none';
+}
+
+// ═══ Rendern: Kennzahlen ═══════════════════════════════════════════
+
+function readOdometer() {
+  try { return parseInt(localStorage.getItem(STORAGE_KEYS.odometer) || '0') || 0; } catch (_) { return 0; }
+}
+
+function renderKpiCards(charges) {
+  const count = charges.length;
+  const totalCost = sumCost(charges);
+  const avgPrice = averagePricePerKwh(charges);
+  const monthCount = groupByMonth(charges).length;
+  const avgPerMonth = monthCount > 0 ? count / monthCount : count;
+
+  // Der Km-Stand ist ein Gesamtwert, deshalb beziehen sich beide Km-Angaben
+  // bewusst auf alle Ladungen, nicht auf den gefilterten Zeitraum.
+  const odometer = readOdometer();
+  const kmPerCharge = odometer > 0 ? ' · Ø ' + Math.round(odometer / allCharges.length).toLocaleString('de-CH') + ' km / Ladung' : '';
+  const costPerKm = odometer > 0 ? ' · Ø CHF ' + formatChf(sumCost(allCharges) / odometer, 2) + ' / km' : '';
+
+  setText('kpiCount', count.toLocaleString('de-CH'));
+  setText('kpiCountSub', 'Ø ' + formatNumber(avgPerMonth, 1) + ' / Monat' + kmPerCharge);
+  setText('kpiCost', 'CHF ' + formatChf(totalCost, 0));
+  setText('kpiCostSub', 'Ø CHF ' + formatChf(totalCost / count) + ' / Ladung' + costPerKm);
+  setText('kpiAvgPrice', 'CHF ' + formatChf(avgPrice, 2));
+  setText('kpiAvgPriceSub', 'Gesamtdurchschnitt');
+
+  renderKpiTrends(charges);
+}
+
+function renderKpiTrends(charges) {
+  const previous = getPreviousPeriodCharges();
+  if (!previous || !previous.length) {
+    ['kpiCountTrend','kpiCostTrend','kpiAvgPriceTrend'].forEach(id => renderTrendBadge(id, null, null));
     return;
   }
-  if (emptyBanner) emptyBanner.style.display = 'none';
-  renderKPIs(data);
-  renderSavings(data);
-  renderRecords(data);
-  renderCostChart(data);
-  renderCountChart(data);
-  renderPriceChart(data);
-  renderLocChart(data);
-  renderDayChart(data);
-  renderHeatmap(data);
-  renderInsights(data);
-  renderYearGrid();
-  renderYearCmp();
-  renderTable(data);
+  renderTrendBadge('kpiCountTrend', charges.length, previous.length, false);
+  renderTrendBadge('kpiCostTrend', sumCost(charges), sumCost(previous), true);
+  renderTrendBadge('kpiAvgPriceTrend', averagePricePerKwh(charges), averagePricePerKwh(previous), true);
 }
 
-function renderKPIs(data) {
-  var count = data.length;
-  var totalKwh = data.reduce(function(s,r){return s+r.kwh;}, 0);
-  var totalCost = data.reduce(function(s,r){return s+r.total;}, 0);
-  var avgPrice = totalKwh > 0 ? totalCost / totalKwh : 0;
-  var locCount = {};
-  data.forEach(function(r){ locCount[r.loc] = (locCount[r.loc]||0) + 1; });
-  var topLoc = Object.entries(locCount).sort(function(a,b){return b[1]-a[1];})[0];
-  var sorted = data.slice().sort(function(a,b){return b.date-a.date;});
-  var last = sorted[0];
-  var monthly = aggregateMonthly(data);
-  var avgPerMonth = monthly.length > 0 ? count / monthly.length : count;
-  var odometer = 0;
-  try { odometer = parseInt(localStorage.getItem('tesla-odometer') || '0') || 0; } catch(_) {}
-  var totalCountAll = allData.length;
-  var totalCostAll = allData.reduce(function(s,r){return s+r.total;}, 0);
-  var kmSub = odometer > 0 ? ' · Ø ' + Math.round(odometer / totalCountAll).toLocaleString('de-CH') + ' km / Ladung' : '';
-  var chfKmSub = odometer > 0 ? ' · Ø CHF ' + chf(totalCostAll / odometer, 2) + ' / km' : '';
-  document.getElementById('kpiCount').textContent = count.toLocaleString('de-CH');
-  document.getElementById('kpiCountSub').textContent = 'Ø ' + fmtNum(avgPerMonth, 1) + ' / Monat' + kmSub;
-  document.getElementById('kpiCost').textContent = 'CHF ' + chf(totalCost, 0);
-  document.getElementById('kpiCostSub').textContent = 'Ø CHF ' + chf(totalCost/count) + ' / Ladung' + chfKmSub;
-  document.getElementById('kpiAvgPrice').textContent = 'CHF ' + chf(avgPrice, 2);
-  document.getElementById('kpiAvgPriceSub').textContent = 'Gesamtdurchschnitt';
-
-  // Trend-Indikatoren ggü. Vorzeitraum
-  var prev = getPreviousPeriodData();
-  if (prev && prev.length > 0) {
-    var prevCount = prev.length;
-    var prevKwh = prev.reduce(function(s,r){return s+r.kwh;}, 0);
-    var prevCost = prev.reduce(function(s,r){return s+r.total;}, 0);
-    var prevAvgPrice = prevKwh > 0 ? prevCost / prevKwh : 0;
-    setTrend('kpiCountTrend', count, prevCount, false);       // mehr Ladungen = informativ-positiv
-    setTrend('kpiCostTrend', totalCost, prevCost, true);      // weniger Kosten = gut
-    setTrend('kpiAvgPriceTrend', avgPrice, prevAvgPrice, true); // weniger pro kWh = gut
+// downIsGood: bei Kosten und Preis ist ein Rückgang die gute Richtung
+function renderTrendBadge(elementId, current, previous, downIsGood) {
+  const badge = el(elementId);
+  if (!badge) return;
+  if (previous == null || previous === 0 || current == null || isNaN(current) || isNaN(previous)) {
+    badge.className = 'kpi-trend hidden';
+    badge.textContent = '';
+    return;
+  }
+  const percent = ((current - previous) / previous) * 100;
+  const magnitude = Math.abs(percent);
+  const arrow = percent > 0 ? '↑' : (percent < 0 ? '↓' : '→');
+  badge.textContent = arrow + ' ' + (magnitude < 10 ? magnitude.toFixed(1) : magnitude.toFixed(0)) + '%';
+  badge.title = 'gegenüber Vorzeitraum';
+  if (magnitude < 0.5) {
+    badge.className = 'kpi-trend neutral';
   } else {
-    setTrend('kpiCountTrend', null, null);
-    setTrend('kpiCostTrend', null, null);
-    setTrend('kpiAvgPriceTrend', null, null);
+    const improved = downIsGood ? percent < 0 : percent > 0;
+    badge.className = 'kpi-trend ' + (improved ? 'good' : 'bad');
   }
 }
 
-function renderCountChart(data) {
+// ═══ Rendern: Ersparnis gegenüber einem Benziner ════════════════════
+
+function getPetrolSettings() {
+  const settings = { consumption: PETROL_DEFAULT_CONSUMPTION, price: PETROL_DEFAULT_PRICE };
+  try {
+    const consumption = parseFloat(localStorage.getItem(STORAGE_KEYS.petrolConsumption));
+    const price = parseFloat(localStorage.getItem(STORAGE_KEYS.petrolPrice));
+    if (!isNaN(consumption) && consumption > 0) settings.consumption = consumption;
+    if (!isNaN(price) && price > 0) settings.price = price;
+  } catch (_) {}
+  return settings;
+}
+
+function savePetrolSettings() {
+  const consumption = parseFloat(el('benzinL100').value);
+  const price = parseFloat(el('benzinPreis').value);
+  try {
+    if (!isNaN(consumption) && consumption > 0) localStorage.setItem(STORAGE_KEYS.petrolConsumption, String(consumption));
+    if (!isNaN(price) && price > 0) localStorage.setItem(STORAGE_KEYS.petrolPrice, String(price));
+  } catch (_) {}
+  if (allCharges.length) renderSavingsCard(getVisibleCharges());
+}
+
+// Kilometer für einen Teilzeitraum: der Km-Stand wird anteilig zur geladenen
+// Energie verteilt. Ohne Km-Stand bleibt nur eine Schätzung über den Verbrauch.
+function estimateKilometers(kwhInPeriod) {
+  const odometer = readOdometer();
+  const totalKwh = sumKwh(allCharges);
+  if (odometer > 0 && totalKwh > 0) return { km: odometer * (kwhInPeriod / totalKwh), estimated: false };
+  return { km: kwhInPeriod / EV_KWH_PER_100KM * 100, estimated: true };
+}
+
+function renderSavingsCard(charges) {
+  const settings = getPetrolSettings();
+  el('benzinL100').value = settings.consumption;
+  el('benzinPreis').value = settings.price;
+
+  const kwh = sumKwh(charges);
+  const electricityCost = sumCost(charges);
+  const distance = estimateKilometers(kwh);
+  const litres = distance.km * settings.consumption / 100;
+  const petrolCost = litres * settings.price;
+  const saved = petrolCost - electricityCost;
+  const co2Saved = (litres * CO2_KG_PER_PETROL_LITRE) - (kwh * CO2_KG_PER_KWH);
+  const trees = co2Saved / CO2_KG_PER_TREE_YEAR;
+
+  const valueNode = el('savingsValue');
+  valueNode.textContent = (saved < 0 ? '– CHF ' : 'CHF ') + formatChf(Math.abs(saved), 0);
+  valueNode.style.color = saved < 0 ? '#ea580c' : '';
+
+  setText('savingsSub', Math.round(distance.km).toLocaleString('de-CH') + ' km für CHF ' + formatChf(electricityCost, 0)
+    + ' Strom statt CHF ' + formatChf(petrolCost, 0) + ' Benzin'
+    + (distance.estimated ? ' · km geschätzt – trag oben deinen Km-Stand ein für genaue Werte' : ''));
+  setText('savingsFuel', Math.round(litres).toLocaleString('de-CH') + ' l');
+  setText('savingsCo2', co2Saved >= 1000 ? formatNumber(co2Saved / 1000, 1) + ' t' : Math.round(co2Saved).toLocaleString('de-CH') + ' kg');
+  setText('savingsTrees', trees >= 10 ? Math.round(trees).toLocaleString('de-CH') : formatNumber(trees, 1));
+}
+
+// ═══ Rendern: Rekorde ══════════════════════════════════════════════
+
+function findExtreme(items, score, keepHigher) {
+  return items.reduce((best, item) =>
+    (keepHigher ? score(item) > score(best) : score(item) < score(best)) ? item : best, items[0]);
+}
+
+// Längster Abstand zwischen zwei aufeinanderfolgenden Ladungen
+function findLongestGap(chargesByDate) {
+  let longest = null;
+  for (let i = 1; i < chargesByDate.length; i++) {
+    const days = (chargesByDate[i].date - chargesByDate[i - 1].date) / 86400000;
+    if (!longest || days > longest.days) longest = { days: days, from: chargesByDate[i - 1].date, to: chargesByDate[i].date };
+  }
+  return longest;
+}
+
+function collectRecords(charges) {
+  const records = [];
+  const withKwh = charges.filter(c => c.kwh > 0);
+
+  const priciest = findExtreme(charges, c => c.total, true);
+  records.push({ icon: '💸', value: 'CHF ' + formatChf(priciest.total, 0), label: 'Teuerste Ladung',
+    meta: formatDate(priciest.date) + ' · ' + priciest.loc });
+
+  if (withKwh.length) {
+    const cheapest = findExtreme(withKwh, pricePerKwh, false);
+    records.push({ icon: '🏷️', value: 'CHF ' + formatChf(pricePerKwh(cheapest), 2), label: 'Bester Preis / kWh',
+      meta: formatDate(cheapest.date) + ' · ' + cheapest.loc });
+  }
+
+  const largest = findExtreme(charges, c => c.kwh, true);
+  records.push({ icon: '🔋', value: formatNumber(largest.kwh, 1) + ' kWh', label: 'Grösste Lademenge',
+    meta: formatDate(largest.date) + ' · ' + largest.loc });
+
+  const visits = {};
+  charges.forEach(c => { visits[c.loc] = (visits[c.loc] || 0) + 1; });
+  const favourite = Object.entries(visits).sort((a, b) => b[1] - a[1])[0];
+  records.push({ icon: '📍', value: favourite[0], label: 'Lieblings-Standort',
+    meta: favourite[1] + '× von ' + charges.length + ' Ladungen' });
+
+  const gap = findLongestGap(charges.slice().sort((a, b) => a.date - b.date));
+  if (gap) {
+    records.push({ icon: '😴', value: Math.round(gap.days) + ' Tage', label: 'Längste Pause',
+      meta: formatDate(gap.from) + ' – ' + formatDate(gap.to) });
+  }
+
+  const months = groupByMonth(charges);
+  if (months.length) {
+    const busiest = findExtreme(months, m => m.count, true);
+    records.push({ icon: '🔥', value: busiest.count + '× geladen', label: 'Aktivster Monat',
+      meta: busiest.label + ' · CHF ' + formatChf(busiest.cost, 0) });
+  }
+  return records;
+}
+
+function renderRecordCards(charges) {
+  setText('recordsSub', 'Bestwerte im gewählten Zeitraum');
+  setHtml('recordsGrid', collectRecords(charges).map(record =>
+    '<div class="record-item"><div class="record-icon">' + record.icon + '</div>' +
+    '<div class="record-val" title="' + record.value + '">' + record.value + '</div>' +
+    '<div class="record-lbl">' + record.label + '</div>' +
+    '<div class="record-meta" title="' + record.meta + '">' + record.meta + '</div></div>'
+  ).join(''));
+}
+
+// ═══ Rendern: Ladevorgänge pro Monat / Monatskalender ══════════════
+
+// Farbpaare für hervorgehobene bzw. ausgegraute Balken (Anzahl-Filter)
+function highlightColors(isHighlighted, accent) {
+  return {
+    background: isHighlighted ? accent + '30' : (isDarkMode() ? 'rgba(100,116,139,0.08)' : 'rgba(148,163,184,0.1)'),
+    border: isHighlighted ? accent : (isDarkMode() ? '#334155' : '#cbd5e1')
+  };
+}
+function isMonthHighlighted(month) {
+  return monthlyCountFilter === null || month.count === monthlyCountFilter;
+}
+function countFilterSuffix() {
+  return monthlyCountFilter !== null ? ' · Filter: ' + monthlyCountFilter + '×' : '';
+}
+
+function renderChargeCountChart(charges) {
   destroyChart('count');
-  var dark = document.body.classList.contains('dark');
-  var gridCol = dark ? '#334155' : '#f1f5f9';
-  // Clean up any existing calendar overlay and restore canvas
-  var existingCal = document.getElementById('countCalendar');
-  if (existingCal) existingCal.remove();
-  var canvas = document.getElementById('chartCount');
+  const existingCalendar = el('countCalendar');
+  if (existingCalendar) existingCalendar.remove();
+  const canvas = el('chartCount');
   canvas.style.display = '';
+
+  // Bei Monatsansicht ersetzt ein Kalender das Balkendiagramm
   if (filterMonths === 1) {
     canvas.style.display = 'none';
-    // Determine which month to show
-    var range = getDateRange();
-    var monthDate = range.start || (data.length ? data[0].date : new Date());
-    var year = monthDate.getFullYear();
-    var month = monthDate.getMonth();
-    // Build dayMap
-    var dayMap = {};
-    data.forEach(function(r){ var d = r.date.getDate(); dayMap[d] = (dayMap[d]||0)+1; });
-    var chargedDays = Object.keys(dayMap).length;
-    var monthName = new Date(year, month, 1).toLocaleDateString('de-CH', { month: 'long' });
-    monthName = monthName.charAt(0).toUpperCase() + monthName.slice(1);
-    document.getElementById('countChartTitle').textContent = 'Ladevorgänge im Monat ' + monthName;
-    document.getElementById('chartCountSub').innerHTML = '<span style="color:#06b6d4">' + data.length + ' Ladevorgänge · ' + chargedDays + ' Tage</span>';
-    document.getElementById('countFilter').innerHTML = '<option value="">Alle</option>';
-    document.getElementById('countFilter').style.visibility = 'hidden';
-    // Calendar geometry
-    var firstDay = new Date(year, month, 1).getDay();
-    var startOffset = (firstDay + 6) % 7; // Mon = 0
-    var daysInMonth = new Date(year, month + 1, 0).getDate();
-    var dayNames = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
-    // Build calendar div
-    var calDiv = document.createElement('div');
-    calDiv.id = 'countCalendar';
-    calDiv.style.cssText = 'position:absolute;top:0;left:0;right:0;bottom:0;display:flex;flex-direction:column;gap:2px;';
-    // Header row
-    var headerRow = document.createElement('div');
-    headerRow.style.cssText = 'display:grid;grid-template-columns:repeat(7,1fr);gap:2px;flex-shrink:0;';
-    dayNames.forEach(function(dn) {
-      var c = document.createElement('div');
-      c.textContent = dn;
-      c.style.cssText = 'text-align:center;font-size:9px;font-weight:600;color:#94a3b8;padding:1px 0;';
-      headerRow.appendChild(c);
-    });
-    calDiv.appendChild(headerRow);
-    // Day grid
-    var gridDiv = document.createElement('div');
-    gridDiv.style.cssText = 'display:grid;grid-template-columns:repeat(7,1fr);grid-auto-rows:1fr;gap:2px;flex:1;min-height:0;';
-    for (var i = 0; i < startOffset; i++) { gridDiv.appendChild(document.createElement('div')); }
-    for (var d = 1; d <= daysInMonth; d++) {
-      var count = dayMap[d] || 0;
-      var charged = count > 0;
-      var cell = document.createElement('div');
-      cell.style.cssText = 'display:flex;flex-direction:column;align-items:center;justify-content:center;border-radius:5px;' +
-        (charged ? 'background:' + (dark ? '#0891b2' : '#06b6d4') + ';' : 'background:' + (dark ? 'rgba(255,255,255,0.04)' : '#f1f5f9') + ';');
-      if (charged) cell.title = count + (count === 1 ? ' Ladevorgang' : ' Ladevorgänge');
-      var numSpan = document.createElement('span');
-      numSpan.textContent = d;
-      numSpan.style.cssText = 'font-size:10px;line-height:1;font-weight:' + (charged ? '700' : '400') + ';color:' + (charged ? '#fff' : (dark ? '#475569' : '#94a3b8')) + ';';
-      cell.appendChild(numSpan);
-      if (count > 1) {
-        var badge = document.createElement('span');
-        badge.textContent = count + '×';
-        badge.style.cssText = 'font-size:8px;line-height:1;color:rgba(255,255,255,0.8);margin-top:1px;';
-        cell.appendChild(badge);
-      }
-      gridDiv.appendChild(cell);
-    }
-    calDiv.appendChild(gridDiv);
-    canvas.parentNode.appendChild(calDiv);
+    renderMonthCalendar(charges, canvas);
     return;
   }
-  var monthly = aggregateMonthly(data);
-  var labels = monthly.map(function(m){return m.label;});
-  var vals = monthly.map(function(m){return m.count;});
-  var avg = vals.length ? parseFloat((vals.reduce(function(s,v){return s+v;},0)/vals.length).toFixed(1)) : 0;
-  var avgLine = vals.map(function(){return avg;});
-  // Populate dropdown
-  var sel = document.getElementById('countFilter');
-  var allCounts = Array.from(new Set(vals)).sort(function(a,b){return a-b;});
-  var currentVal = filterCount !== null ? String(filterCount) : '';
-  sel.innerHTML = '<option value="">Alle</option>';
-  allCounts.forEach(function(c){ sel.innerHTML += '<option value="'+c+'"'+(String(c)===currentVal?' selected':'')+'>'+c+'×</option>'; });
-  // Highlight colors
-  var highlight = monthly.map(function(m){ return filterCount === null || m.count === filterCount; });
-  var bgColors = monthly.map(function(m,i){ return highlight[i] ? '#06b6d430' : (dark ? 'rgba(100,116,139,0.08)' : 'rgba(148,163,184,0.1)'); });
-  var bdColors = monthly.map(function(m,i){ return highlight[i] ? '#06b6d4' : (dark ? '#334155' : '#cbd5e1'); });
-  document.getElementById('countChartTitle').textContent = 'Ladevorgänge pro Monat';
-  document.getElementById('countFilter').style.visibility = '';
-  document.getElementById('chartCountSub').innerHTML = '<span style="color:#06b6d4">' + monthly.length + ' Monate · Ø ' + fmtNum(avg,1) + ' / Monat' + (filterCount !== null ? ' · Filter: ' + filterCount + '×' : '') + '</span>';
-  var ctx = document.getElementById('chartCount').getContext('2d');
-  charts.count = new Chart(ctx, {
+  renderChargeCountBars(charges);
+}
+
+function renderMonthCalendar(charges, canvas) {
+  const range = getVisibleDateRange();
+  const monthDate = range.start || (charges.length ? charges[0].date : new Date());
+  const year = monthDate.getFullYear();
+  const month = monthDate.getMonth();
+
+  const chargesPerDay = {};
+  charges.forEach(charge => {
+    const day = charge.date.getDate();
+    chargesPerDay[day] = (chargesPerDay[day] || 0) + 1;
+  });
+
+  const monthName = new Date(year, month, 1).toLocaleDateString('de-CH', { month: 'long' });
+  setText('countChartTitle', 'Ladevorgänge im Monat ' + monthName.charAt(0).toUpperCase() + monthName.slice(1));
+  setHtml('chartCountSub', '<span style="color:' + CHART_COLORS.count + '">' + charges.length
+    + ' Ladevorgänge · ' + Object.keys(chargesPerDay).length + ' Tage</span>');
+  setHtml('countFilter', '<option value="">Alle</option>');
+  el('countFilter').style.visibility = 'hidden';
+
+  canvas.parentNode.appendChild(buildCalendarElement(year, month, chargesPerDay));
+}
+
+function buildCalendarElement(year, month, chargesPerDay) {
+  const dark = isDarkMode();
+  const calendar = document.createElement('div');
+  calendar.id = 'countCalendar';
+  calendar.style.cssText = 'position:absolute;top:0;left:0;right:0;bottom:0;display:flex;flex-direction:column;gap:2px;';
+
+  const header = document.createElement('div');
+  header.style.cssText = 'display:grid;grid-template-columns:repeat(7,1fr);gap:2px;flex-shrink:0;';
+  WEEKDAYS.forEach(name => {
+    const cell = document.createElement('div');
+    cell.textContent = name;
+    cell.style.cssText = 'text-align:center;font-size:9px;font-weight:600;color:#94a3b8;padding:1px 0;';
+    header.appendChild(cell);
+  });
+  calendar.appendChild(header);
+
+  const grid = document.createElement('div');
+  grid.style.cssText = 'display:grid;grid-template-columns:repeat(7,1fr);grid-auto-rows:1fr;gap:2px;flex:1;min-height:0;';
+  const leadingBlanks = (new Date(year, month, 1).getDay() + 6) % 7;   // Montag als erste Spalte
+  for (let i = 0; i < leadingBlanks; i++) grid.appendChild(document.createElement('div'));
+
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  for (let day = 1; day <= daysInMonth; day++) {
+    grid.appendChild(buildCalendarDay(day, chargesPerDay[day] || 0, dark));
+  }
+  calendar.appendChild(grid);
+  return calendar;
+}
+
+function buildCalendarDay(day, count, dark) {
+  const charged = count > 0;
+  const cell = document.createElement('div');
+  cell.style.cssText = 'display:flex;flex-direction:column;align-items:center;justify-content:center;border-radius:5px;'
+    + 'background:' + (charged ? (dark ? '#0891b2' : '#06b6d4') : (dark ? 'rgba(255,255,255,0.04)' : '#f1f5f9')) + ';';
+  if (charged) cell.title = count + (count === 1 ? ' Ladevorgang' : ' Ladevorgänge');
+
+  const number = document.createElement('span');
+  number.textContent = day;
+  number.style.cssText = 'font-size:10px;line-height:1;font-weight:' + (charged ? '700' : '400')
+    + ';color:' + (charged ? '#fff' : (dark ? '#475569' : '#94a3b8')) + ';';
+  cell.appendChild(number);
+
+  if (count > 1) {
+    const badge = document.createElement('span');
+    badge.textContent = count + '×';
+    badge.style.cssText = 'font-size:8px;line-height:1;color:rgba(255,255,255,0.8);margin-top:1px;';
+    cell.appendChild(badge);
+  }
+  return cell;
+}
+
+// Auswahlliste "Monate mit genau N Ladungen"
+function fillCountFilterOptions(counts) {
+  const select = el('countFilter');
+  const current = monthlyCountFilter !== null ? String(monthlyCountFilter) : '';
+  const options = Array.from(new Set(counts)).sort((a, b) => a - b)
+    .map(count => '<option value="' + count + '"' + (String(count) === current ? ' selected' : '') + '>' + count + '×</option>');
+  select.innerHTML = '<option value="">Alle</option>' + options.join('');
+  select.style.visibility = '';
+}
+
+function renderChargeCountBars(charges) {
+  const months = groupByMonth(charges);
+  const counts = months.map(m => m.count);
+  const avg = roundTo(average(counts), 1);
+  const highlighted = months.map(isMonthHighlighted);
+  const colors = highlighted.map(on => highlightColors(on, CHART_COLORS.count));
+
+  fillCountFilterOptions(counts);
+  setText('countChartTitle', 'Ladevorgänge pro Monat');
+  setHtml('chartCountSub', '<span style="color:' + CHART_COLORS.count + '">' + months.length
+    + ' Monate · Ø ' + formatNumber(avg, 1) + ' / Monat' + countFilterSuffix() + '</span>');
+
+  charts.count = new Chart(el('chartCount').getContext('2d'), {
     type: 'bar',
-    data: { labels: labels, datasets: [
-      { type: 'bar', data: vals, backgroundColor: bgColors, borderColor: bdColors, borderWidth: 1, borderRadius: 6, topLabel: true, topLabelFmt: function(v, j){ return (filterCount === null || highlight[j]) && v > 0 ? v : ''; }, order: 2 },
-      { type: 'line', data: avgLine, borderColor: '#f97316', borderWidth: 2, borderDash: [5,4], pointRadius: 0, fill: false, tension: 0, topLabel: false, order: 1 }
-    ]},
-    options: { responsive: true, maintainAspectRatio: false,
+    data: {
+      labels: months.map(m => m.label),
+      datasets: [
+        { type: 'bar', data: counts, backgroundColor: colors.map(c => c.background), borderColor: colors.map(c => c.border),
+          borderWidth: 1, borderRadius: 6, topLabel: true,
+          topLabelFmt: (value, i) => highlighted[i] && value > 0 ? value : '', order: 2 },
+        averageLineDataset(avg, counts.length, CHART_COLORS.average)
+      ]
+    },
+    options: chartOptions({
       layout: { padding: { top: 22 } },
-      plugins: { legend: { display: false }, tooltip: { callbacks: { label: function(c){ return c.datasetIndex===0 ? ' ' + c.raw + ' Ladevorgänge' : ' Ø ' + fmtNum(c.raw,1) + ' / Monat'; } } } },
-      scales: { x: { grid: { display: false }, ticks: { font: { size: 10 }, color: '#94a3b8' } },
-        y: { grid: { color: gridCol }, ticks: { font: { size: 10 }, color: '#94a3b8', stepSize: 1, precision: 0, callback: function(v){ return Number.isInteger(v) ? v : null; } }, beginAtZero: true } } }
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx =>
+        ctx.datasetIndex === 0 ? ' ' + ctx.raw + ' Ladevorgänge' : ' Ø ' + formatNumber(ctx.raw, 1) + ' / Monat' } } },
+      scales: { x: categoryAxis(), y: countAxis() }
+    })
   });
 }
 
-function renderCostChart(data) {
+// ═══ Rendern: Kosten ═══════════════════════════════════════════════
+
+function renderCostChart(charges) {
   destroyChart('cost');
-  var dark = document.body.classList.contains('dark');
-  var gridCol = dark ? '#334155' : '#f1f5f9';
-  if (filterMonths === 1) {
-    var sessions = data.slice().sort(function(a,b){ return a.date - b.date; });
-    var p2 = function(n){ return n < 10 ? '0'+n : ''+n; };
-    var labels = sessions.map(function(r){ return p2(r.date.getDate())+'.'+p2(r.date.getMonth()+1)+'.'; });
-    var vals = sessions.map(function(r){ return parseFloat(r.total.toFixed(2)); });
-    var kwhVals = sessions.map(function(r){ return parseFloat(r.kwh.toFixed(1)); });
-    var avg = vals.length ? parseFloat((vals.reduce(function(s,v){return s+v;},0)/vals.length).toFixed(2)) : 0;
-    var avgLine = vals.map(function(){return avg;});
-    var bgColors = sessions.map(function(){ return dark ? '#22c55e25' : '#22c55e30'; });
-    var bdColors = sessions.map(function(){ return '#22c55e'; });
-    var maxCost = vals.length ? Math.max.apply(null, vals) : 10;
-    var yMax = Math.ceil(maxCost * 1.25 / 5) * 5;
-    var y2Max = yMax * 2;
-    var avgKwh = kwhVals.length ? parseFloat((kwhVals.reduce(function(s,v){return s+v;},0)/kwhVals.length).toFixed(1)) : 0;
-    document.getElementById('chartCostSub').innerHTML = '<span style="color:#22c55e">' + sessions.length + ' Ladevorgänge · Ø CHF ' + chf(avg,2) + ' / Ladung</span><span style="color:#f97316"> · Ø ' + fmtNum(avgKwh,1) + ' kWh / Ladung</span>';
-    var ctx = document.getElementById('chartCost').getContext('2d');
-    charts.cost = new Chart(ctx, {
-      type: 'bar',
-      data: { labels: labels, datasets: [
-        { type: 'bar', data: vals, backgroundColor: bgColors, borderColor: bdColors, borderWidth: 1, borderRadius: 6, topLabel: true, topLabelFmt: function(v, j){ return v > 0 ? chf(v,0) : ''; }, yAxisID: 'y', order: 3 },
-        { type: 'line', data: kwhVals, borderColor: '#f97316', borderWidth: 2, fill: false, tension: 0, pointBackgroundColor: '#f97316', pointRadius: 2, pointHoverRadius: 3, topLabel: false, yAxisID: 'y2', order: 1 },
-        { type: 'line', data: avgLine, borderColor: 'rgba(34,197,94,0.45)', borderWidth: 2, borderDash: [5,4], pointRadius: 0, fill: false, tension: 0, topLabel: false, yAxisID: 'y', order: 2 }
-      ]},
-      options: { responsive: true, maintainAspectRatio: false, layout: { padding: { top: 22 } },
-        plugins: { legend: { display: false }, tooltip: { displayColors: false, filter: function(item){ return item.datasetIndex !== 1; }, callbacks: { label: function(c){
-          if (c.datasetIndex === 0) {
-            var s = sessions[c.dataIndex];
-            var h = s.date.getHours(), m = s.date.getMinutes();
-            var t = (h<10?'0':'')+h+':'+(m<10?'0':'')+m;
-            return [' CHF ' + chf(c.raw), ' kWh ' + fmtNum(s.kwh, 1), ' ' + s.loc, ' ' + t + ' Uhr'];
-          }
-          return ' Ø CHF ' + chf(c.raw) + ' / Ladung';
-        } } } },
-        scales: {
-          x: { grid: { display: false }, ticks: { font: { size: 10 }, color: '#94a3b8' } },
-          y: { grid: { color: gridCol }, ticks: { font: { size: 10 }, color: '#94a3b8', callback: function(v){ return 'CHF ' + v; } }, beginAtZero: true, max: yMax, position: 'left' },
-          y2: { grid: { display: false }, ticks: { font: { size: 10 }, color: '#94a3b8', callback: function(v){ return v + ' kWh'; } }, beginAtZero: true, max: y2Max, position: 'right' }
-        }
-      }
-    });
-    return;
-  }
-  var monthly = aggregateMonthly(data);
-  // reihen = das, was tatsächlich gezeichnet wird. Bei laufendem Jahr auf 12 Monate
-  // aufgefüllt, damit die Hochrechnung für die Restmonate Platz hat.
-  var reihen = monthly.map(function(m){ return { label: m.label, cost: parseFloat(m.cost.toFixed(2)), count: m.count, prognose: false }; });
-  var hochrechnung = null;
-  var jetzt = new Date();
-  if (filterYear !== null && filterYear === jetzt.getFullYear() && monthly.length > 0) {
-    var proMonat = new Array(12).fill(null);
-    monthly.forEach(function(m){ proMonat[parseInt(m.key.split('-')[1], 10) - 1] = m; });
-    var letzterIdx = -1;
-    for (var i = 0; i < 12; i++) { if (proMonat[i]) letzterIdx = i; }
-    if (letzterIdx > -1 && letzterIdx < 11) {
-      var bisher = monthly.reduce(function(s,m){ return s + m.cost; }, 0);
-      var schnittMonat = bisher / (letzterIdx + 1);
-      reihen = proMonat.map(function(m, idx){
-        if (m) return { label: m.label, cost: parseFloat(m.cost.toFixed(2)), count: m.count, prognose: false };
-        // gleiche Monatsschreibweise wie bei den echten Monaten
-        return { label: fmtMonth(new Date(filterYear, idx, 1)), cost: idx > letzterIdx ? parseFloat(schnittMonat.toFixed(2)) : null, count: 0, prognose: idx > letzterIdx };
-      });
-      hochrechnung = bisher + schnittMonat * (11 - letzterIdx);
-    }
-  }
+  if (filterMonths === 1) renderCostPerChargeChart(charges);
+  else renderCostPerMonthChart(charges);
+}
 
-  var labels = reihen.map(function(r){ return r.label; });
-  var vals = reihen.map(function(r){ return r.cost; });
-  var echte = reihen.filter(function(r){ return !r.prognose && r.cost !== null; }).map(function(r){ return r.cost; });
-  var avg = echte.length ? parseFloat((echte.reduce(function(s,v){return s+v;},0)/echte.length).toFixed(2)) : 0;
-  var avgLine = reihen.map(function(){return avg;});
-  var highlight = reihen.map(function(r){ return filterCount === null || r.count === filterCount; });
-  var bgColors = reihen.map(function(r,i){
-    if (r.prognose) return dark ? 'rgba(34,197,94,0.10)' : 'rgba(34,197,94,0.13)';
-    return highlight[i] ? '#22c55e30' : (dark ? 'rgba(100,116,139,0.08)' : 'rgba(148,163,184,0.1)');
-  });
-  var bdColors = reihen.map(function(r,i){
-    if (r.prognose) return dark ? 'rgba(34,197,94,0.40)' : 'rgba(34,197,94,0.45)';
-    return highlight[i] ? '#22c55e' : (dark ? '#334155' : '#cbd5e1');
-  });
-  document.getElementById('chartCostSub').innerHTML = '<span style="color:#22c55e">' + monthly.length + ' Monate · Ø CHF ' + chf(avg,2) + (filterCount !== null ? ' · Filter: ' + filterCount + '×' : '') + '</span>' +
-    (hochrechnung !== null ? '<span style="color:#94a3b8"> · Hochrechnung ' + filterYear + ': CHF ' + chf(hochrechnung, 0) + '</span>' : '');
-  var ctx = document.getElementById('chartCost').getContext('2d');
-  charts.cost = new Chart(ctx, {
+// Monatsansicht: jede einzelne Ladung als Balken, kWh als Linie auf zweiter Achse
+function renderCostPerChargeChart(charges) {
+  const sessions = charges.slice().sort((a, b) => a.date - b.date);
+  const costs = sessions.map(c => roundTo(c.total, 2));
+  const kwhValues = sessions.map(c => roundTo(c.kwh, 1));
+  const avgCost = roundTo(average(costs), 2);
+  const avgKwh = roundTo(average(kwhValues), 1);
+  const costAxisMax = Math.ceil((costs.length ? Math.max.apply(null, costs) : 10) * 1.25 / 5) * 5;
+
+  setHtml('chartCostSub', '<span style="color:' + CHART_COLORS.cost + '">' + sessions.length
+    + ' Ladevorgänge · Ø CHF ' + formatChf(avgCost, 2) + ' / Ladung</span><span style="color:'
+    + CHART_COLORS.average + '"> · Ø ' + formatNumber(avgKwh, 1) + ' kWh / Ladung</span>');
+
+  charts.cost = new Chart(el('chartCost').getContext('2d'), {
     type: 'bar',
-    data: { labels: labels, datasets: [
-      { type: 'bar', data: vals, backgroundColor: bgColors, borderColor: bdColors, borderWidth: 1, borderRadius: 6, topLabel: true, topLabelFmt: function(v, j){
-        if (reihen[j] && reihen[j].prognose) return '~' + chf(v,0);
-        return (filterCount === null || highlight[j]) && v > 0 ? chf(v,0) : '';
-      }, order: 2 },
-      { type: 'line', data: avgLine, borderColor: 'rgba(34,197,94,0.45)', borderWidth: 2, borderDash: [5,4], pointRadius: 0, fill: false, tension: 0, topLabel: false, label: 'Durchschnitt', order: 1 }
-    ]},
-    options: { responsive: true, maintainAspectRatio: false, layout: { padding: { top: 22 } }, plugins: { legend: { display: false }, tooltip: { callbacks: { label: function(c){
-      var reihe = reihen[c.dataIndex];
-      if (c.datasetIndex === 0) {
-        if (reihe && reihe.prognose) return ' CHF ' + chf(c.raw, 0) + '  geschätzt';
-        var proLadung = reihe && reihe.count > 0 ? reihe.cost / reihe.count : 0;
-        return [' CHF ' + chf(c.raw) + '  total', ' CHF ' + chf(proLadung) + '  Ø / Ladung'];
+    data: {
+      labels: sessions.map(c => formatDayMonth(c.date)),
+      datasets: [
+        { type: 'bar', data: costs,
+          backgroundColor: sessions.map(() => isDarkMode() ? '#22c55e25' : '#22c55e30'),
+          borderColor: sessions.map(() => CHART_COLORS.cost),
+          borderWidth: 1, borderRadius: 6, topLabel: true,
+          topLabelFmt: value => value > 0 ? formatChf(value, 0) : '', yAxisID: 'y', order: 3 },
+        { type: 'line', data: kwhValues, borderColor: CHART_COLORS.average, borderWidth: 2, fill: false, tension: 0,
+          pointBackgroundColor: CHART_COLORS.average, pointRadius: 2, pointHoverRadius: 3, topLabel: false, yAxisID: 'y2', order: 1 },
+        Object.assign(averageLineDataset(avgCost, costs.length, 'rgba(34,197,94,0.45)'), { yAxisID: 'y', order: 2 })
+      ]
+    },
+    options: chartOptions({
+      layout: { padding: { top: 22 } },
+      plugins: { legend: { display: false }, tooltip: { displayColors: false,
+        filter: item => item.datasetIndex !== 1,      // kWh-Linie erscheint schon im Balken-Tooltip
+        callbacks: { label: ctx => {
+          if (ctx.datasetIndex !== 0) return ' Ø CHF ' + formatChf(ctx.raw) + ' / Ladung';
+          const session = sessions[ctx.dataIndex];
+          return [' CHF ' + formatChf(ctx.raw), ' kWh ' + formatNumber(session.kwh, 1), ' ' + session.loc, ' ' + formatTime(session.date) + ' Uhr'];
+        } } } },
+      scales: {
+        x: categoryAxis(),
+        y: valueAxis(value => 'CHF ' + value, { max: costAxisMax, position: 'left' }),
+        y2: valueAxis(value => value + ' kWh', { grid: { display: false }, max: costAxisMax * 2, position: 'right' })
       }
-      return ' Ø CHF ' + chf(c.raw);
-    } } } }, scales: { x: { grid: { display: false }, ticks: { font: { size: 10 }, color: '#94a3b8' } }, y: { grid: { color: gridCol }, ticks: { font: { size: 10 }, color: '#94a3b8', callback: function(v){ return 'CHF ' + v; } }, beginAtZero: true } } }
+    })
   });
 }
 
-function renderPriceChart(data) {
+// Für das laufende Jahr die Restmonate mit dem bisherigen Schnitt auffüllen
+function buildCostRowsWithForecast(months) {
+  const actual = months.map(m => ({ label: m.label, cost: roundTo(m.cost, 2), count: m.count, forecast: false }));
+  if (filterYear === null || filterYear !== new Date().getFullYear() || !months.length) {
+    return { rows: actual, yearEndTotal: null };
+  }
+  const byMonthIndex = new Array(12).fill(null);
+  months.forEach(m => { byMonthIndex[parseInt(m.key.split('-')[1], 10) - 1] = m; });
+  let lastIndex = -1;
+  byMonthIndex.forEach((month, i) => { if (month) lastIndex = i; });
+  if (lastIndex < 0 || lastIndex >= 11) return { rows: actual, yearEndTotal: null };
+
+  const spentSoFar = sumBy(months, m => m.cost);
+  const avgPerMonth = spentSoFar / (lastIndex + 1);
+  const rows = byMonthIndex.map((month, i) => month
+    ? { label: month.label, cost: roundTo(month.cost, 2), count: month.count, forecast: false }
+    : { label: formatMonthLabel(new Date(filterYear, i, 1)), cost: i > lastIndex ? roundTo(avgPerMonth, 2) : null, count: 0, forecast: i > lastIndex });
+  return { rows: rows, yearEndTotal: spentSoFar + avgPerMonth * (11 - lastIndex) };
+}
+
+function renderCostPerMonthChart(charges) {
+  const months = groupByMonth(charges);
+  const forecast = buildCostRowsWithForecast(months);
+  const rows = forecast.rows;
+
+  const actualCosts = rows.filter(r => !r.forecast && r.cost !== null).map(r => r.cost);
+  const avgCost = roundTo(average(actualCosts), 2);
+  const highlighted = rows.map(isMonthHighlighted);
+  const colors = rows.map((row, i) => row.forecast
+    ? { background: isDarkMode() ? 'rgba(34,197,94,0.10)' : 'rgba(34,197,94,0.13)',
+        border: isDarkMode() ? 'rgba(34,197,94,0.40)' : 'rgba(34,197,94,0.45)' }
+    : highlightColors(highlighted[i], CHART_COLORS.cost));
+
+  setHtml('chartCostSub', '<span style="color:' + CHART_COLORS.cost + '">' + months.length
+    + ' Monate · Ø CHF ' + formatChf(avgCost, 2) + countFilterSuffix() + '</span>'
+    + (forecast.yearEndTotal !== null
+      ? '<span style="color:#94a3b8"> · Hochrechnung ' + filterYear + ': CHF ' + formatChf(forecast.yearEndTotal, 0) + '</span>' : ''));
+
+  charts.cost = new Chart(el('chartCost').getContext('2d'), {
+    type: 'bar',
+    data: {
+      labels: rows.map(r => r.label),
+      datasets: [
+        { type: 'bar', data: rows.map(r => r.cost),
+          backgroundColor: colors.map(c => c.background), borderColor: colors.map(c => c.border),
+          borderWidth: 1, borderRadius: 6, topLabel: true,
+          topLabelFmt: (value, i) => rows[i].forecast ? '~' + formatChf(value, 0)
+            : (highlighted[i] && value > 0 ? formatChf(value, 0) : ''), order: 2 },
+        Object.assign(averageLineDataset(avgCost, rows.length, 'rgba(34,197,94,0.45)'), { label: 'Durchschnitt' })
+      ]
+    },
+    options: chartOptions({
+      layout: { padding: { top: 22 } },
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => {
+        const row = rows[ctx.dataIndex];
+        if (ctx.datasetIndex !== 0) return ' Ø CHF ' + formatChf(ctx.raw);
+        if (row && row.forecast) return ' CHF ' + formatChf(ctx.raw, 0) + '  geschätzt';
+        const perCharge = row && row.count > 0 ? row.cost / row.count : 0;
+        return [' CHF ' + formatChf(ctx.raw) + '  total', ' CHF ' + formatChf(perCharge) + '  Ø / Ladung'];
+      } } } },
+      scales: { x: categoryAxis(), y: valueAxis(value => 'CHF ' + value) }
+    })
+  });
+}
+
+// ═══ Rendern: Ø Preis pro kWh ══════════════════════════════════════
+
+function renderPriceChart(charges) {
   destroyChart('price');
-  var dark = document.body.classList.contains('dark');
-  var gridCol = dark ? '#334155' : '#f1f5f9';
-  if (filterMonths === 1) {
-    var sessions = data.slice().sort(function(a,b){ return a.date - b.date; });
-    var p2 = function(n){ return n < 10 ? '0'+n : ''+n; };
-    var labels = sessions.map(function(r){ return p2(r.date.getDate())+'.'+p2(r.date.getMonth()+1)+'.'; });
-    var vals = sessions.map(function(r){ return r.kwh > 0 ? parseFloat((r.total/r.kwh).toFixed(3)) : 0; });
-    var nonZero = vals.filter(function(v){return v>0;});
-    var avg = nonZero.length ? parseFloat((nonZero.reduce(function(s,v){return s+v;},0)/nonZero.length).toFixed(3)) : 0;
-    var avgLine = vals.map(function(){return avg;});
-    document.getElementById('chartPriceSub').innerHTML = '<span style="color:#a855f7">' + sessions.length + ' Ladevorgänge · Ø ' + chf(avg,2) + ' CHF/kWh</span>';
-    var ctx = document.getElementById('chartPrice').getContext('2d');
-    charts.price = new Chart(ctx, {
-      type: 'line',
-      data: { labels: labels, datasets: [
-        { data: vals, borderColor: '#a855f7', backgroundColor: 'transparent', borderWidth: 2.5, fill: false, tension: 0, pointBackgroundColor: '#a855f7', pointRadius: 5, pointHoverRadius: 7, order: 2 },
-        { data: avgLine, borderColor: 'rgba(168,85,247,0.45)', borderWidth: 2, borderDash: [5,4], pointRadius: 0, fill: false, tension: 0, order: 1 }
-      ]},
-      options: { responsive: true, maintainAspectRatio: false,
-        plugins: { legend: { display: false }, tooltip: { displayColors: false, callbacks: { label: function(c){
-          if (c.datasetIndex === 0) {
-            var s = sessions[c.dataIndex];
-            var h = s.date.getHours(), m = s.date.getMinutes();
-            var t = (h<10?'0':'')+h+':'+(m<10?'0':'')+m;
-            return [' CHF ' + chf(c.raw,3) + ' / kWh', ' ' + s.loc, ' ' + t + ' Uhr'];
-          }
-          return ' Ø CHF ' + chf(c.raw,3) + ' / kWh';
-        } } } },
-        scales: { x: { grid: { display: false }, ticks: { font: { size: 10 }, color: '#94a3b8' } }, y: { grid: { color: gridCol }, ticks: { font: { size: 10 }, color: '#94a3b8', callback: function(v){ return v.toFixed(2) + ' CHF/kWh'; } }, beginAtZero: false } } }
-    });
-    return;
-  }
-  var monthly = aggregateMonthly(data);
-  var labels = monthly.map(function(m){return m.label;});
-  var vals = monthly.map(function(m){ return m.kwh > 0 ? parseFloat((m.cost/m.kwh).toFixed(3)) : 0; });
-  var nonZero = vals.filter(function(v){return v>0;});
-  var avg = nonZero.length ? parseFloat((nonZero.reduce(function(s,v){return s+v;},0)/nonZero.length).toFixed(3)) : 0;
-  var avgLine = vals.map(function(){return avg;});
-  var highlight = monthly.map(function(m){ return filterCount === null || m.count === filterCount; });
-  var ptColors = monthly.map(function(m,i){ return highlight[i] ? '#a855f7' : (dark ? '#334155' : '#cbd5e1'); });
-  var ptRadii = monthly.map(function(m,i){ return highlight[i] ? 5 : 2; });
-  var ptHover = monthly.map(function(m,i){ return highlight[i] ? 7 : 3; });
-  document.getElementById('chartPriceSub').innerHTML = '<span style="color:#a855f7">Ø ' + chf(avg,2) + ' CHF/kWh im Zeitraum' + (filterCount !== null ? ' · Filter: ' + filterCount + '×' : '') + '</span>';
-  var ctx = document.getElementById('chartPrice').getContext('2d');
-  charts.price = new Chart(ctx, {
+  if (filterMonths === 1) renderPricePerChargeChart(charges);
+  else renderPricePerMonthChart(charges);
+}
+
+function priceLineOptions(tooltipLabel) {
+  return chartOptions({
+    plugins: { legend: { display: false }, tooltip: tooltipLabel },
+    scales: { x: categoryAxis(), y: valueAxis(value => value.toFixed(2) + ' CHF/kWh', { beginAtZero: false }) }
+  });
+}
+
+function renderPricePerChargeChart(charges) {
+  const sessions = charges.slice().sort((a, b) => a.date - b.date);
+  const prices = sessions.map(c => roundTo(pricePerKwh(c), 3));
+  const avgPrice = roundTo(average(prices.filter(p => p > 0)), 3);
+
+  setHtml('chartPriceSub', '<span style="color:' + CHART_COLORS.price + '">' + sessions.length
+    + ' Ladevorgänge · Ø ' + formatChf(avgPrice, 2) + ' CHF/kWh</span>');
+
+  charts.price = new Chart(el('chartPrice').getContext('2d'), {
     type: 'line',
-    data: { labels: labels, datasets: [
-      { data: vals, borderColor: filterCount !== null ? 'rgba(168,85,247,0.25)' : '#a855f7', backgroundColor: 'transparent', borderWidth: 2.5, fill: false, tension: 0, pointBackgroundColor: ptColors, pointRadius: ptRadii, pointHoverRadius: ptHover, order: 2 },
-      { data: avgLine, borderColor: filterCount !== null ? 'rgba(168,85,247,0.3)' : 'rgba(168,85,247,0.45)', borderWidth: 2, borderDash: [5,4], pointRadius: 0, fill: false, tension: 0, order: 1 }
+    data: { labels: sessions.map(c => formatDayMonth(c.date)), datasets: [
+      { data: prices, borderColor: CHART_COLORS.price, backgroundColor: 'transparent', borderWidth: 2.5,
+        fill: false, tension: 0, pointBackgroundColor: CHART_COLORS.price, pointRadius: 5, pointHoverRadius: 7, order: 2 },
+      { data: new Array(prices.length).fill(avgPrice), borderColor: 'rgba(168,85,247,0.45)', borderWidth: 2,
+        borderDash: [5, 4], pointRadius: 0, fill: false, tension: 0, order: 1 }
     ]},
-    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { callbacks: { label: function(c){ return c.datasetIndex===0 ? ' CHF ' + chf(c.raw,3) + ' / kWh' : ' Ø CHF ' + chf(c.raw,3) + ' / kWh'; } } } }, scales: { x: { grid: { display: false }, ticks: { font: { size: 10 }, color: '#94a3b8' } }, y: { grid: { color: gridCol }, ticks: { font: { size: 10 }, color: '#94a3b8', callback: function(v){ return v.toFixed(2) + ' CHF/kWh'; } }, beginAtZero: false } } }
+    options: priceLineOptions({ displayColors: false, callbacks: { label: ctx => {
+      if (ctx.datasetIndex !== 0) return ' Ø CHF ' + formatChf(ctx.raw, 3) + ' / kWh';
+      const session = sessions[ctx.dataIndex];
+      return [' CHF ' + formatChf(ctx.raw, 3) + ' / kWh', ' ' + session.loc, ' ' + formatTime(session.date) + ' Uhr'];
+    } } })
   });
 }
 
-function renderLocChart(data) {
+function renderPricePerMonthChart(charges) {
+  const months = groupByMonth(charges);
+  const prices = months.map(m => m.kwh > 0 ? roundTo(m.cost / m.kwh, 3) : 0);
+  const avgPrice = roundTo(average(prices.filter(p => p > 0)), 3);
+  const highlighted = months.map(isMonthHighlighted);
+  const dimmed = monthlyCountFilter !== null;
+
+  setHtml('chartPriceSub', '<span style="color:' + CHART_COLORS.price + '">Ø ' + formatChf(avgPrice, 2)
+    + ' CHF/kWh im Zeitraum' + countFilterSuffix() + '</span>');
+
+  charts.price = new Chart(el('chartPrice').getContext('2d'), {
+    type: 'line',
+    data: { labels: months.map(m => m.label), datasets: [
+      { data: prices, borderColor: dimmed ? 'rgba(168,85,247,0.25)' : CHART_COLORS.price, backgroundColor: 'transparent',
+        borderWidth: 2.5, fill: false, tension: 0,
+        pointBackgroundColor: highlighted.map(on => on ? CHART_COLORS.price : (isDarkMode() ? '#334155' : '#cbd5e1')),
+        pointRadius: highlighted.map(on => on ? 5 : 2),
+        pointHoverRadius: highlighted.map(on => on ? 7 : 3), order: 2 },
+      { data: new Array(prices.length).fill(avgPrice),
+        borderColor: dimmed ? 'rgba(168,85,247,0.3)' : 'rgba(168,85,247,0.45)', borderWidth: 2,
+        borderDash: [5, 4], pointRadius: 0, fill: false, tension: 0, order: 1 }
+    ]},
+    options: priceLineOptions({ callbacks: { label: ctx =>
+      (ctx.datasetIndex === 0 ? ' CHF ' : ' Ø CHF ') + formatChf(ctx.raw, 3) + ' / kWh' } })
+  });
+}
+
+// ═══ Rendern: Standorte und Wochentage ═════════════════════════════
+
+function renderLocationChart(charges) {
   destroyChart('loc');
-  var locCost = {};
-  data.forEach(function(r){ locCost[r.loc] = (locCost[r.loc]||0) + r.total; });
-  var entries = Object.entries(locCost).sort(function(a,b){return b[1]-a[1];});
-  var labels = entries.map(function(e){return e[0];});
-  var vals = entries.map(function(e){return parseFloat(e[1].toFixed(2));});
-  var total = vals.reduce(function(s,v){return s+v;}, 0);
-  document.getElementById('chartLocSub').textContent = entries.length + ' Standorte';
-  var ctx = document.getElementById('chartLoc').getContext('2d');
-  charts.loc = new Chart(ctx, {
+  const costPerLocation = {};
+  charges.forEach(c => { costPerLocation[c.loc] = (costPerLocation[c.loc] || 0) + c.total; });
+  const entries = Object.entries(costPerLocation).sort((a, b) => b[1] - a[1]);
+  const values = entries.map(e => roundTo(e[1], 2));
+  const total = values.reduce((a, b) => a + b, 0);
+
+  setText('chartLocSub', entries.length + ' Standorte');
+  charts.loc = new Chart(el('chartLoc').getContext('2d'), {
     type: 'doughnut',
-    data: { labels: labels, datasets: [{ data: vals, backgroundColor: COLORS.slice(0, labels.length), borderWidth: 2, borderColor: 'white' }] },
-    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { callbacks: { label: function(c){ return ' CHF ' + chf(c.raw) + ' (' + Math.round(c.raw/total*100) + '%)'; } } } }, cutout: '65%' }
+    data: { labels: entries.map(e => e[0]),
+      datasets: [{ data: values, backgroundColor: COLORS.slice(0, entries.length), borderWidth: 2, borderColor: 'white' }] },
+    options: chartOptions({
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx =>
+        ' CHF ' + formatChf(ctx.raw) + ' (' + Math.round(ctx.raw / total * 100) + '%)' } } },
+      cutout: '65%'
+    })
   });
-  var legend = document.getElementById('locLegend');
-  legend.innerHTML = entries.slice(0,8).map(function(e, i) {
-    return '<div class="legend-item"><div class="legend-dot" style="background:' + COLORS[i%COLORS.length] + '"></div><span class="legend-name" title="' + e[0] + '">' + e[0] + '</span><span class="legend-val">CHF ' + chf(e[1], 0) + '</span></div>';
-  }).join('');
+
+  setHtml('locLegend', entries.slice(0, 8).map((entry, i) =>
+    '<div class="legend-item"><div class="legend-dot" style="background:' + COLORS[i % COLORS.length] + '"></div>' +
+    '<span class="legend-name" title="' + entry[0] + '">' + entry[0] + '</span>' +
+    '<span class="legend-val">CHF ' + formatChf(entry[1], 0) + '</span></div>'
+  ).join(''));
 }
 
-function renderDayChart(data) {
+function renderWeekdayChart(charges) {
   destroyChart('day');
-  var dark = document.body.classList.contains('dark');
-  var gridCol = dark ? '#334155' : '#f1f5f9';
-  var dayCounts = [0,0,0,0,0,0,0];
-  data.forEach(function(r){ dayCounts[r.dayIdx]++; });
-  var maxVal = Math.max.apply(null, dayCounts);
-  document.getElementById('chartDaySub').textContent = data.length + ' Ladevorgänge';
-  var ctx = document.getElementById('chartDay').getContext('2d');
-  charts.day = new Chart(ctx, {
+  const perWeekday = [0, 0, 0, 0, 0, 0, 0];
+  charges.forEach(c => { perWeekday[c.dayIdx]++; });
+  const busiest = Math.max.apply(null, perWeekday);
+
+  setText('chartDaySub', charges.length + ' Ladevorgänge');
+  charts.day = new Chart(el('chartDay').getContext('2d'), {
     type: 'bar',
-    data: { labels: WEEKDAYS, datasets: [{ data: dayCounts, backgroundColor: dayCounts.map(function(v){ return v === maxVal ? '#3b82f6' : '#3b82f640'; }), borderColor: '#3b82f6', borderWidth: 1, borderRadius: 6, topLabel: true, topLabelFmt: function(v){ return v > 0 ? v : ''; } }] },
-    options: { responsive: true, maintainAspectRatio: false, layout: { padding: { top: 22 } }, plugins: { legend: { display: false }, tooltip: { callbacks: { label: function(c){ return ' ' + c.raw + ' Ladevorgänge'; } } } }, scales: { x: { grid: { display: false }, ticks: { font: { size: 11 }, color: '#64748b' } }, y: { grid: { color: gridCol }, ticks: { font: { size: 10 }, color: '#94a3b8', stepSize: 1, precision: 0, callback: function(v){ return Number.isInteger(v) ? v : null; } }, beginAtZero: true } } }
+    data: { labels: WEEKDAYS, datasets: [{
+      data: perWeekday,
+      backgroundColor: perWeekday.map(v => v === busiest ? CHART_COLORS.weekday : CHART_COLORS.weekday + '40'),
+      borderColor: CHART_COLORS.weekday, borderWidth: 1, borderRadius: 6,
+      topLabel: true, topLabelFmt: value => value > 0 ? value : ''
+    }]},
+    options: chartOptions({
+      layout: { padding: { top: 22 } },
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => ' ' + ctx.raw + ' Ladevorgänge' } } },
+      scales: { x: categoryAxis(11, '#64748b'), y: countAxis() }
+    })
   });
 }
 
-function renderHeatmap(data) {
-  var dark = document.body.classList.contains('dark');
-  var grid = Array.from({length:7}, function(){ return new Array(24).fill(0); });
-  data.forEach(function(r){ grid[r.dayIdx][r.hour]++; });
-  var maxVal = Math.max.apply(null, [].concat.apply([], grid));
-  if (maxVal === 0) maxVal = 1;
-  function cellColor(v) {
-    if (v === 0) return dark ? '#334155' : '#e2e8f0';
-    var t = Math.pow(v / maxVal, 0.6);
-    var r = Math.round(239 - t*180);
-    var g = Math.round(246 - t*140);
-    var b = Math.round(255 - t*60);
-    return 'rgb(' + r + ',' + g + ',' + b + ')';
+// ═══ Rendern: Heatmap Wochentag × Stunde ═══════════════════════════
+
+// Blauverlauf; der Exponent 0.6 hebt seltene Stunden sichtbarer hervor
+function heatColor(value, maxValue) {
+  if (value === 0) return isDarkMode() ? '#334155' : '#e2e8f0';
+  const intensity = Math.pow(value / maxValue, 0.6);
+  return 'rgb(' + Math.round(239 - intensity * 180) + ',' + Math.round(246 - intensity * 140) + ',' + Math.round(255 - intensity * 60) + ')';
+}
+
+function renderHeatmap(charges) {
+  const grid = Array.from({ length: 7 }, () => new Array(24).fill(0));
+  charges.forEach(c => { grid[c.dayIdx][c.hour]++; });
+  const maxValue = Math.max(1, Math.max.apply(null, [].concat.apply([], grid)));
+
+  let hourLabels = '<div class="heatmap-col-labels">';
+  for (let hour = 0; hour < 24; hour++) {
+    hourLabels += '<div class="heatmap-col-label">' + (hour % 3 === 0 ? hour : '') + '</div>';
   }
-  var colLabels = '<div class="heatmap-col-labels">';
-  for (var h = 0; h < 24; h++) { colLabels += '<div class="heatmap-col-label">' + (h%3===0 ? h : '') + '</div>'; }
-  colLabels += '</div>';
-  var rows = '';
-  for (var d = 0; d < 7; d++) {
-    rows += '<div class="heatmap-row"><div class="heatmap-row-label">' + WEEKDAYS[d] + '</div><div class="heatmap-hours">';
-    for (var hh = 0; hh < 24; hh++) {
-      var v = grid[d][hh];
-      rows += '<div class="heatmap-cell" style="background:' + cellColor(v) + '" title="' + WEEKDAYS_LONG[d] + ', ' + hh + ':00 Uhr: ' + v + ' Ladung' + (v!==1?'en':'') + '"></div>';
+  hourLabels += '</div>';
+
+  let rows = '';
+  for (let day = 0; day < 7; day++) {
+    rows += '<div class="heatmap-row"><div class="heatmap-row-label">' + WEEKDAYS[day] + '</div><div class="heatmap-hours">';
+    for (let hour = 0; hour < 24; hour++) {
+      const value = grid[day][hour];
+      rows += '<div class="heatmap-cell" style="background:' + heatColor(value, maxValue) + '" title="'
+        + WEEKDAYS_LONG[day] + ', ' + hour + ':00 Uhr: ' + value + ' Ladung' + (value !== 1 ? 'en' : '') + '"></div>';
     }
     rows += '</div></div>';
   }
-  var legendCells = [0, 0.25, 0.5, 0.75, 1].map(function(t){
-    var v = Math.round(t * maxVal);
-    return '<div class="heatmap-legend-cell" style="background:' + cellColor(v) + '"></div>';
-  }).join('');
-  document.getElementById('heatmapContainer').innerHTML = '<div class="heatmap-grid">' + colLabels + rows + '</div><div class="heatmap-legend-row"><span class="heatmap-legend-label">wenig</span><div class="heatmap-legend-cells">' + legendCells + '</div><span class="heatmap-legend-label">viel</span></div>';
+
+  const legend = [0, 0.25, 0.5, 0.75, 1]
+    .map(step => '<div class="heatmap-legend-cell" style="background:' + heatColor(Math.round(step * maxValue), maxValue) + '"></div>')
+    .join('');
+
+  setHtml('heatmapContainer', '<div class="heatmap-grid">' + hourLabels + rows + '</div>'
+    + '<div class="heatmap-legend-row"><span class="heatmap-legend-label">wenig</span>'
+    + '<div class="heatmap-legend-cells">' + legend + '</div><span class="heatmap-legend-label">viel</span></div>');
 }
 
-function renderTable(data) {
-  // 1. Suchfilter
-  var searched = data;
-  if (tableSearch) {
-    searched = data.filter(function(r){
-      var dateStr = fmtDate(r.date).toLowerCase();
-      var dayStr = WEEKDAYS_LONG[r.dayIdx].toLowerCase();
-      var locStr = r.loc.toLowerCase();
-      return dateStr.indexOf(tableSearch) !== -1 || dayStr.indexOf(tableSearch) !== -1 || locStr.indexOf(tableSearch) !== -1;
-    });
-  }
+// ═══ Rendern: Günstigster Ladezeitpunkt ════════════════════════════
 
-  // 2. Sortierung
-  var sorted = searched.slice().sort(function(a, b) {
-    var av, bv;
-    switch (tableSortBy) {
-      case 'loc':   av = a.loc; bv = b.loc; break;
-      case 'kwh':   av = a.kwh; bv = b.kwh; break;
-      case 'cost':  av = a.total; bv = b.total; break;
-      case 'price': av = a.kwh > 0 ? a.total/a.kwh : 0; bv = b.kwh > 0 ? b.total/b.kwh : 0; break;
-      case 'day':   av = a.dayIdx; bv = b.dayIdx; break;
-      case 'time':  av = a.date.getHours()*60 + a.date.getMinutes(); bv = b.date.getHours()*60 + b.date.getMinutes(); break;
-      default:      av = a.date.getTime(); bv = b.date.getTime();
-    }
-    if (typeof av === 'string') return tableSortDir === 'asc' ? av.localeCompare(bv) : bv.localeCompare(av);
-    return tableSortDir === 'asc' ? av - bv : bv - av;
+const TIME_OF_DAY_BLOCKS = [
+  { from: 0,  to: 5,  name: 'nachts' },
+  { from: 6,  to: 11, name: 'morgens' },
+  { from: 12, to: 17, name: 'nachmittags' },
+  { from: 18, to: 23, name: 'abends' }
+];
+function timeOfDayBlock(charge) {
+  const block = TIME_OF_DAY_BLOCKS.find(b => charge.hour >= b.from && charge.hour <= b.to);
+  return block ? block.name : 'nachts';
+}
+
+// Günstigste Gruppe nach Ø Preis/kWh; erst ab minCharges je Gruppe und
+// mindestens zwei vergleichbaren Gruppen ist die Aussage belastbar.
+function cheapestGroup(charges, groupOf, minCharges) {
+  const groups = {};
+  charges.forEach(charge => {
+    const key = groupOf(charge);
+    if (!groups[key]) groups[key] = { kwh: 0, cost: 0, count: 0 };
+    groups[key].kwh += charge.kwh;
+    groups[key].cost += charge.total;
+    groups[key].count++;
   });
+  const candidates = Object.entries(groups)
+    .filter(entry => entry[1].count >= minCharges && entry[1].kwh > 0)
+    .map(entry => ({ key: entry[0], price: entry[1].cost / entry[1].kwh }));
+  if (candidates.length < 2) return null;
+  return candidates.sort((a, b) => a.price - b.price)[0];
+}
 
-  // 3. Header-Pfeile aktualisieren
-  document.querySelectorAll('thead th[data-sort]').forEach(function(th) {
-    var arrow = th.querySelector('.sort-arrow');
-    if (th.dataset.sort === tableSortBy) {
-      th.classList.add('sort-active');
-      arrow.textContent = tableSortDir === 'asc' ? '▲' : '▼';
-    } else {
-      th.classList.remove('sort-active');
-      arrow.textContent = '⇅';
-    }
-  });
+function renderPriceInsights(charges) {
+  const row = el('insightRow');
+  const withKwh = charges.filter(c => c.kwh > 0);
+  const overallPrice = averagePricePerKwh(withKwh);
+  if (withKwh.length < 5 || overallPrice <= 0) { row.style.display = 'none'; return; }
 
-  var body = document.getElementById('tableBody');
-  // 4. Empty-State
-  if (sorted.length === 0) {
-    tableRendered = [];
-    document.getElementById('tableCount').textContent = '0 Treffer';
-    body.innerHTML = '<tr><td colspan="7"><div class="empty-state"><div class="empty-state-icon">🔍</div>Keine Treffer' + (tableSearch ? ' für „' + tableSearch + '"' : ' in diesem Zeitraum') + '</div></td></tr>';
-    return;
-  }
+  const insights = [];
+  const cheapestDay = cheapestGroup(withKwh, c => WEEKDAYS_LONG[c.dayIdx], 3);
+  if (cheapestDay) insights.push({ text: 'Am günstigsten lädst du', highlight: cheapestDay.key.toLowerCase() + 's', price: cheapestDay.price });
+  const cheapestTime = cheapestGroup(withKwh, timeOfDayBlock, 3);
+  if (cheapestTime) insights.push({ text: 'Günstigste Tageszeit', highlight: cheapestTime.key, price: cheapestTime.price });
+  const cheapestPlace = cheapestGroup(withKwh, c => c.loc, 2);
+  if (cheapestPlace) insights.push({ text: 'Günstigster Standort', highlight: cheapestPlace.key, price: cheapestPlace.price });
 
-  // 5. Limitierung: nur bei Default-Sortierung (Datum desc), kein Sucheingabe, kein 1M/3M Filter
-  var defaultSort = (tableSortBy === 'date' && tableSortDir === 'desc');
-  var showAll = (filterMonths === 1 || filterMonths === 3 || tableSearch || !defaultSort);
-  var display = showAll ? sorted : sorted.slice(0, 15);
-
-  document.getElementById('tableCount').textContent = showAll
-    ? sorted.length + ' Einträge'
-    : data.length + ' Einträge total, erste 15 angezeigt';
-
-  var monthOrder = [];
-  display.forEach(function(r) {
-    if (monthOrder.indexOf(r.monthKey) === -1) monthOrder.push(r.monthKey);
-  });
-  tableRendered = display;
-  body.innerHTML = display.map(function(r, idx) {
-    var avgP = r.kwh > 0 ? r.total/r.kwh : 0;
-    var dayClass = r.dayIdx < 5 ? 'blue' : 'orange';
-    var timeStr = r.date.toLocaleTimeString('de-CH', {hour:'2-digit', minute:'2-digit'});
-    var rowClass = monthOrder.indexOf(r.monthKey) % 2 === 0 ? 'month-even' : 'month-odd';
-    return '<tr class="' + rowClass + '" data-idx="' + idx + '" title="Für Details antippen"><td>' + fmtDate(r.date) + '</td><td><span class="badge badge-green">' + r.loc + '</span></td><td>' + fmtNum(r.kwh,2) + '</td><td>CHF ' + chf(r.total) + '</td><td>CHF ' + chf(avgP,2) + '</td><td><span class="badge badge-' + dayClass + '">' + WEEKDAYS_LONG[r.dayIdx] + '</span></td><td>' + timeStr + '</td></tr>';
+  if (!insights.length) { row.style.display = 'none'; return; }
+  row.style.display = '';
+  row.innerHTML = insights.map(insight => {
+    const diff = (insight.price - overallPrice) / overallPrice * 100;
+    const badge = Math.abs(diff) < 0.5 ? 'wie dein Schnitt'
+      : (diff < 0 ? '−' : '+') + Math.abs(diff).toFixed(0) + '% ggü. Schnitt';
+    return '<div class="insight-item">' + insight.text + ' <span class="insight-strong">' + insight.highlight + '</span>'
+      + ' <span>CHF ' + formatChf(insight.price, 2) + '/kWh</span> <span class="insight-pct">' + badge + '</span></div>';
   }).join('');
 }
 
-// ── Ersparnis gegenüber einem Benziner ──────────────────────────────
-function getBenzinSettings() {
-  var l100 = BENZIN_DEFAULT_L100, preis = BENZIN_DEFAULT_PREIS;
-  try {
-    var a = parseFloat(localStorage.getItem('tesla-benzin-l100'));
-    var b = parseFloat(localStorage.getItem('tesla-benzin-preis'));
-    if (!isNaN(a) && a > 0) l100 = a;
-    if (!isNaN(b) && b > 0) preis = b;
-  } catch(_) {}
-  return { l100: l100, preis: preis };
-}
+// ═══ Rendern: Jahresraster ═════════════════════════════════════════
 
-function saveBenzinSettings() {
-  var l = parseFloat(document.getElementById('benzinL100').value);
-  var p = parseFloat(document.getElementById('benzinPreis').value);
-  try {
-    if (!isNaN(l) && l > 0) localStorage.setItem('tesla-benzin-l100', String(l));
-    if (!isNaN(p) && p > 0) localStorage.setItem('tesla-benzin-preis', String(p));
-  } catch(_) {}
-  if (allData.length) renderSavings(getFilteredData());
-}
-
-function renderSavings(data) {
-  var s = getBenzinSettings();
-  document.getElementById('benzinL100').value = s.l100;
-  document.getElementById('benzinPreis').value = s.preis;
-  var kwh = data.reduce(function(sum,r){ return sum + r.kwh; }, 0);
-  var cost = data.reduce(function(sum,r){ return sum + r.total; }, 0);
-  var kwhAll = allData.reduce(function(sum,r){ return sum + r.kwh; }, 0);
-  var odometer = 0;
-  try { odometer = parseInt(localStorage.getItem('tesla-odometer') || '0') || 0; } catch(_) {}
-  // Kilometer anteilig zur geladenen Energie, damit auch gefilterte Zeiträume stimmen
-  var geschaetzt = !(odometer > 0 && kwhAll > 0);
-  var km = geschaetzt ? (kwh / STROM_KWH_100KM * 100) : (odometer * (kwh / kwhAll));
-  var liter = km * s.l100 / 100;
-  var benzinKosten = liter * s.preis;
-  var ersparnis = benzinKosten - cost;
-  var co2 = (liter * CO2_BENZIN_KG_PRO_L) - (kwh * CO2_STROM_KG_PRO_KWH);
-  var baeume = co2 / CO2_BAUM_KG_PRO_JAHR;
-
-  var valEl = document.getElementById('savingsValue');
-  valEl.textContent = (ersparnis < 0 ? '– CHF ' : 'CHF ') + chf(Math.abs(ersparnis), 0);
-  valEl.style.color = ersparnis < 0 ? '#ea580c' : '';
-  document.getElementById('savingsSub').textContent =
-    Math.round(km).toLocaleString('de-CH') + ' km für CHF ' + chf(cost, 0) + ' Strom statt CHF ' + chf(benzinKosten, 0) + ' Benzin' +
-    (geschaetzt ? ' · km geschätzt – trag oben deinen Km-Stand ein für genaue Werte' : '');
-  document.getElementById('savingsFuel').textContent = Math.round(liter).toLocaleString('de-CH') + ' l';
-  document.getElementById('savingsCo2').textContent = co2 >= 1000
-    ? fmtNum(co2 / 1000, 1) + ' t'
-    : Math.round(co2).toLocaleString('de-CH') + ' kg';
-  document.getElementById('savingsTrees').textContent = baeume >= 10
-    ? Math.round(baeume).toLocaleString('de-CH')
-    : fmtNum(baeume, 1);
-}
-
-// ── Persönliche Rekorde ─────────────────────────────────────────────
-function renderRecords(data) {
-  var grid = document.getElementById('recordsGrid');
-  var items = [];
-  var byDate = data.slice().sort(function(a,b){ return a.date - b.date; });
-
-  var teuerste = data.reduce(function(m,r){ return r.total > m.total ? r : m; }, data[0]);
-  items.push({ icon: '💸', val: 'CHF ' + chf(teuerste.total, 0), lbl: 'Teuerste Ladung', meta: fmtDate(teuerste.date) + ' · ' + teuerste.loc });
-
-  var mitKwh = data.filter(function(r){ return r.kwh > 0; });
-  if (mitKwh.length) {
-    var guenstigste = mitKwh.reduce(function(m,r){ return (r.total/r.kwh) < (m.total/m.kwh) ? r : m; }, mitKwh[0]);
-    items.push({ icon: '🏷️', val: 'CHF ' + chf(guenstigste.total/guenstigste.kwh, 2), lbl: 'Bester Preis / kWh', meta: fmtDate(guenstigste.date) + ' · ' + guenstigste.loc });
-  }
-
-  var groesste = data.reduce(function(m,r){ return r.kwh > m.kwh ? r : m; }, data[0]);
-  items.push({ icon: '🔋', val: fmtNum(groesste.kwh, 1) + ' kWh', lbl: 'Grösste Lademenge', meta: fmtDate(groesste.date) + ' · ' + groesste.loc });
-
-  var locCount = {};
-  data.forEach(function(r){ locCount[r.loc] = (locCount[r.loc] || 0) + 1; });
-  var topLoc = Object.entries(locCount).sort(function(a,b){ return b[1] - a[1]; })[0];
-  items.push({ icon: '📍', val: topLoc[0], lbl: 'Lieblings-Standort', meta: topLoc[1] + '× von ' + data.length + ' Ladungen' });
-
-  if (byDate.length > 1) {
-    var maxLuecke = 0, lueckeVon = null, lueckeBis = null;
-    for (var i = 1; i < byDate.length; i++) {
-      var tage = (byDate[i].date - byDate[i-1].date) / 86400000;
-      if (tage > maxLuecke) { maxLuecke = tage; lueckeVon = byDate[i-1].date; lueckeBis = byDate[i].date; }
-    }
-    items.push({ icon: '😴', val: Math.round(maxLuecke) + ' Tage', lbl: 'Längste Pause', meta: fmtDate(lueckeVon) + ' – ' + fmtDate(lueckeBis) });
-  }
-
-  var monthly = aggregateMonthly(data);
-  if (monthly.length) {
-    var aktivster = monthly.reduce(function(m,r){ return r.count > m.count ? r : m; }, monthly[0]);
-    items.push({ icon: '🔥', val: aktivster.count + '× geladen', lbl: 'Aktivster Monat', meta: aktivster.label + ' · CHF ' + chf(aktivster.cost, 0) });
-  }
-
-  document.getElementById('recordsSub').textContent = 'Bestwerte im gewählten Zeitraum';
-  grid.innerHTML = items.map(function(it){
-    return '<div class="record-item"><div class="record-icon">' + it.icon + '</div>' +
-      '<div class="record-val" title="' + it.val + '">' + it.val + '</div>' +
-      '<div class="record-lbl">' + it.lbl + '</div>' +
-      '<div class="record-meta" title="' + it.meta + '">' + it.meta + '</div></div>';
-  }).join('');
-}
-
-// ── Jahresraster: jeder Tag ein Kästchen ────────────────────────────
-function setYearGridYear(val) {
-  yearGridYear = val === '' ? null : parseInt(val);
+function setYearGridYear(value) {
+  yearGridYear = value === '' ? null : parseInt(value);
   renderYearGrid();
 }
 
+function yearGridColor(count, maxCount) {
+  if (count === 0) return isDarkMode() ? '#334155' : '#e2e8f0';
+  const intensity = Math.pow(count / maxCount, 0.6);
+  return 'rgb(' + Math.round(219 - intensity * 186) + ',' + Math.round(234 - intensity * 141) + ',' + Math.round(254 - intensity * 8) + ')';
+}
+
+function daysInYear(year) {
+  return ((year % 4 === 0 && year % 100 !== 0) || year % 400 === 0) ? 366 : 365;
+}
+
+// Ladungen des Jahres nach "Monat-Tag" gebündelt
+function chargesPerDayOfYear(year) {
+  const perDay = {};
+  allCharges.filter(c => c.year === year).forEach(charge => {
+    const key = charge.date.getMonth() + '-' + charge.date.getDate();
+    if (!perDay[key]) perDay[key] = { count: 0, kwh: 0, cost: 0 };
+    perDay[key].count++;
+    perDay[key].kwh += charge.kwh;
+    perDay[key].cost += charge.total;
+  });
+  return perDay;
+}
+
 function renderYearGrid() {
-  var container = document.getElementById('yearGridContainer');
-  var sel = document.getElementById('yearGridSelect');
-  var dark = document.body.classList.contains('dark');
-  var years = Array.from(new Set(allData.map(function(r){ return r.year; }))).sort();
-  if (!years.length) { container.innerHTML = ''; sel.innerHTML = ''; document.getElementById('yearGridLegend').innerHTML = ''; return; }
-  var year = (yearGridYear !== null && years.indexOf(yearGridYear) !== -1) ? yearGridYear : years[years.length - 1];
-  sel.innerHTML = years.map(function(y){
-    return '<option value="' + y + '"' + (y === year ? ' selected' : '') + '>' + y + '</option>';
-  }).join('');
-
-  var jahresDaten = allData.filter(function(r){ return r.year === year; });
-  var dayMap = {};
-  jahresDaten.forEach(function(r){
-    var k = r.date.getMonth() + '-' + r.date.getDate();
-    if (!dayMap[k]) dayMap[k] = { count: 0, kwh: 0, cost: 0 };
-    dayMap[k].count++; dayMap[k].kwh += r.kwh; dayMap[k].cost += r.total;
-  });
-  var maxCount = 0;
-  Object.keys(dayMap).forEach(function(k){ if (dayMap[k].count > maxCount) maxCount = dayMap[k].count; });
-  if (maxCount === 0) maxCount = 1;
-
-  function cellColor(v) {
-    if (v === 0) return dark ? '#334155' : '#e2e8f0';
-    var t = Math.pow(v / maxCount, 0.6);
-    return 'rgb(' + Math.round(219 - t*186) + ',' + Math.round(234 - t*141) + ',' + Math.round(254 - t*8) + ')';
+  const years = uniqueYears(allCharges);
+  if (!years.length) {
+    setHtml('yearGridContainer', '');
+    setHtml('yearGridSelect', '');
+    setHtml('yearGridLegend', '');
+    return;
   }
+  const year = (yearGridYear !== null && years.includes(yearGridYear)) ? yearGridYear : years[years.length - 1];
+  setHtml('yearGridSelect', years.map(y =>
+    '<option value="' + y + '"' + (y === year ? ' selected' : '') + '>' + y + '</option>').join(''));
 
-  var jan1 = new Date(year, 0, 1);
-  var startOffset = (jan1.getDay() + 6) % 7; // Montag = 0
-  var tageImJahr = ((year % 4 === 0 && year % 100 !== 0) || year % 400 === 0) ? 366 : 365;
-  var spalten = Math.ceil((startOffset + tageImJahr) / 7);
+  const perDay = chargesPerDayOfYear(year);
+  const maxCount = Math.max(1, ...Object.values(perDay).map(day => day.count));
+  const totalDays = daysInYear(year);
+  const leadingBlanks = (new Date(year, 0, 1).getDay() + 6) % 7;   // Montag als erste Zeile
+  const weekColumns = Math.ceil((leadingBlanks + totalDays) / 7);
 
-  // Monatsbeschriftung: pro Spalte der Monat, der in dieser Woche neu beginnt
-  var spaltenMonat = new Array(spalten).fill('');
-  var gesehen = {};
-  for (var t = 0; t < tageImJahr; t++) {
-    var d = new Date(year, 0, 1 + t);
-    var spalte = Math.floor((startOffset + t) / 7);
-    if (!gesehen[d.getMonth()]) { gesehen[d.getMonth()] = true; spaltenMonat[spalte] = MONTHS_SHORT[d.getMonth()]; }
-  }
-  var monthsHtml = '<div class="year-months">' + spaltenMonat.map(function(m){
-    return '<div class="year-month-label">' + m + '</div>';
-  }).join('') + '</div>';
+  const container = el('yearGridContainer');
+  container.style.setProperty('--year-cols', weekColumns);
+  container.innerHTML = buildYearMonthLabels(year, totalDays, leadingBlanks, weekColumns)
+    + '<div class="year-body">' + buildYearWeekdayLabels()
+    + '<div class="year-grid">' + buildYearCells(year, totalDays, leadingBlanks, weekColumns, perDay, maxCount) + '</div></div>';
 
-  var labelsHtml = '<div class="year-daylabels">' + WEEKDAYS.map(function(w, i){
-    return '<div class="year-daylabel">' + (i % 2 === 0 ? w : '') + '</div>';
-  }).join('') + '</div>';
-
-  var cells = '';
-  for (var i2 = 0; i2 < startOffset; i2++) cells += '<div class="year-cell empty"></div>';
-  for (var t2 = 0; t2 < tageImJahr; t2++) {
-    var tag = new Date(year, 0, 1 + t2);
-    var eintrag = dayMap[tag.getMonth() + '-' + tag.getDate()];
-    var anzahl = eintrag ? eintrag.count : 0;
-    var titel = WEEKDAYS_LONG[(tag.getDay() + 6) % 7] + ', ' + fmtDate(tag) + ' · ' +
-      (anzahl === 0 ? 'nicht geladen' : anzahl + '× · ' + fmtNum(eintrag.kwh, 1) + ' kWh · CHF ' + chf(eintrag.cost, 0));
-    cells += '<div class="year-cell" style="background:' + cellColor(anzahl) + '" title="' + titel + '"></div>';
-  }
-  var restZellen = spalten * 7 - (startOffset + tageImJahr);
-  for (var i3 = 0; i3 < restZellen; i3++) cells += '<div class="year-cell empty"></div>';
-
-  var legendCells = [0, 0.25, 0.5, 0.75, 1].map(function(f){
-    return '<div class="year-legend-cell" style="background:' + cellColor(Math.round(f * maxCount)) + '"></div>';
-  }).join('');
-
-  container.style.setProperty('--year-cols', spalten);
-  container.innerHTML = monthsHtml + '<div class="year-body">' + labelsHtml + '<div class="year-grid">' + cells + '</div></div>';
   // Legende liegt bewusst ausserhalb des scrollbaren Rasters, damit sie immer sichtbar bleibt
-  document.getElementById('yearGridLegend').innerHTML =
-    '<span class="year-legend-label">nicht geladen</span><div class="year-legend-cells">' + legendCells + '</div><span class="year-legend-label">' + maxCount + '× am Tag</span>';
+  setHtml('yearGridLegend', '<span class="year-legend-label">nicht geladen</span><div class="year-legend-cells">'
+    + [0, 0.25, 0.5, 0.75, 1].map(step =>
+        '<div class="year-legend-cell" style="background:' + yearGridColor(Math.round(step * maxCount), maxCount) + '"></div>').join('')
+    + '</div><span class="year-legend-label">' + maxCount + '× am Tag</span>');
 
-  var ladetage = Object.keys(dayMap).length;
-  var gesamtKwh = jahresDaten.reduce(function(s,r){ return s + r.kwh; }, 0);
-  document.getElementById('yearGridSub').innerHTML = '<span style="color:#3b82f6">' + jahresDaten.length +
-    ' Ladungen an ' + ladetage + ' Tagen · ' + fmtNum(gesamtKwh, 0) + ' kWh im Jahr ' + year + '</span>';
+  const yearCharges = allCharges.filter(c => c.year === year);
+  setHtml('yearGridSub', '<span style="color:' + CHART_COLORS.weekday + '">' + yearCharges.length + ' Ladungen an '
+    + Object.keys(perDay).length + ' Tagen · ' + formatNumber(sumKwh(yearCharges), 0) + ' kWh im Jahr ' + year + '</span>');
 }
 
-// ── Jahresvergleich ─────────────────────────────────────────────────
-function setYearCmpMetric(val) {
-  yearCmpMetric = val;
-  renderYearCmp();
-}
-
-function renderYearCmp() {
-  destroyChart('yearCmp');
-  var dark = document.body.classList.contains('dark');
-  var gridCol = dark ? '#334155' : '#f1f5f9';
-  var years = Array.from(new Set(allData.map(function(r){ return r.year; }))).sort();
-  if (!years.length) return;
-
-  var datasets = years.map(function(y, i) {
-    var werte = new Array(12).fill(null);
-    allData.filter(function(r){ return r.year === y; }).forEach(function(r){
-      var m = r.date.getMonth();
-      if (werte[m] === null) werte[m] = 0;
-      if (yearCmpMetric === 'count') werte[m] += 1;
-      else if (yearCmpMetric === 'cost') werte[m] += r.total;
-      else werte[m] += r.kwh;
-    });
-    if (yearCmpMetric !== 'count') {
-      werte = werte.map(function(v){ return v === null ? null : parseFloat(v.toFixed(1)); });
+// Monatsname über der Spalte, in der der Monat beginnt
+function buildYearMonthLabels(year, totalDays, leadingBlanks, weekColumns) {
+  const labelPerColumn = new Array(weekColumns).fill('');
+  const seenMonths = {};
+  for (let dayOffset = 0; dayOffset < totalDays; dayOffset++) {
+    const date = new Date(year, 0, 1 + dayOffset);
+    if (!seenMonths[date.getMonth()]) {
+      seenMonths[date.getMonth()] = true;
+      labelPerColumn[Math.floor((leadingBlanks + dayOffset) / 7)] = MONTHS_SHORT[date.getMonth()];
     }
-    var farbe = COLORS[i % COLORS.length];
-    return { label: String(y), data: werte, borderColor: farbe, backgroundColor: farbe,
-      borderWidth: 2.5, fill: false, tension: 0, pointRadius: 4, pointHoverRadius: 6, spanGaps: true, topLabel: false };
-  });
+  }
+  return '<div class="year-months">' + labelPerColumn.map(label =>
+    '<div class="year-month-label">' + label + '</div>').join('') + '</div>';
+}
 
-  var summen = years.map(function(y){
-    var jahresDaten = allData.filter(function(r){ return r.year === y; });
-    if (yearCmpMetric === 'count') return y + ': ' + jahresDaten.length + '×';
-    if (yearCmpMetric === 'cost') return y + ': CHF ' + chf(jahresDaten.reduce(function(s,r){ return s + r.total; }, 0), 0);
-    return y + ': ' + fmtNum(jahresDaten.reduce(function(s,r){ return s + r.kwh; }, 0), 0) + ' kWh';
-  });
-  document.getElementById('yearCmpSub').textContent = summen.join('  ·  ');
+function buildYearWeekdayLabels() {
+  return '<div class="year-daylabels">' + WEEKDAYS.map((name, i) =>
+    '<div class="year-daylabel">' + (i % 2 === 0 ? name : '') + '</div>').join('') + '</div>';
+}
 
-  var ctx = document.getElementById('chartYearCmp').getContext('2d');
-  charts.yearCmp = new Chart(ctx, {
+function buildYearCells(year, totalDays, leadingBlanks, weekColumns, perDay, maxCount) {
+  const blank = '<div class="year-cell empty"></div>';
+  let cells = blank.repeat(leadingBlanks);
+  for (let dayOffset = 0; dayOffset < totalDays; dayOffset++) {
+    const date = new Date(year, 0, 1 + dayOffset);
+    const day = perDay[date.getMonth() + '-' + date.getDate()];
+    const count = day ? day.count : 0;
+    const title = WEEKDAYS_LONG[(date.getDay() + 6) % 7] + ', ' + formatDate(date) + ' · '
+      + (count === 0 ? 'nicht geladen' : count + '× · ' + formatNumber(day.kwh, 1) + ' kWh · CHF ' + formatChf(day.cost, 0));
+    cells += '<div class="year-cell" style="background:' + yearGridColor(count, maxCount) + '" title="' + title + '"></div>';
+  }
+  return cells + blank.repeat(weekColumns * 7 - (leadingBlanks + totalDays));
+}
+
+// ═══ Rendern: Jahresvergleich ══════════════════════════════════════
+
+function setYearComparisonMetric(metric) {
+  yearComparisonMetric = metric;
+  renderYearComparisonChart();
+}
+
+// Monatswerte eines Jahres; Monate ohne Ladung bleiben null, damit die Linie dort endet
+function monthlyMetricValues(year, metric) {
+  const values = new Array(12).fill(null);
+  allCharges.filter(c => c.year === year).forEach(charge => {
+    const month = charge.date.getMonth();
+    if (values[month] === null) values[month] = 0;
+    values[month] += metric === 'count' ? 1 : (metric === 'cost' ? charge.total : charge.kwh);
+  });
+  return metric === 'count' ? values : values.map(v => v === null ? null : roundTo(v, 1));
+}
+
+function yearComparisonSummary(year, metric) {
+  const yearCharges = allCharges.filter(c => c.year === year);
+  if (metric === 'count') return year + ': ' + yearCharges.length + '×';
+  if (metric === 'cost') return year + ': CHF ' + formatChf(sumCost(yearCharges), 0);
+  return year + ': ' + formatNumber(sumKwh(yearCharges), 0) + ' kWh';
+}
+
+function renderYearComparisonChart() {
+  destroyChart('yearCmp');
+  const years = uniqueYears(allCharges);
+  if (!years.length) return;
+  const metric = yearComparisonMetric;
+
+  setText('yearCmpSub', years.map(year => yearComparisonSummary(year, metric)).join('  ·  '));
+
+  charts.yearCmp = new Chart(el('chartYearCmp').getContext('2d'), {
     type: 'line',
-    data: { labels: MONTHS_SHORT, datasets: datasets },
-    options: { responsive: true, maintainAspectRatio: false,
+    data: { labels: MONTHS_SHORT, datasets: years.map((year, i) => ({
+      label: String(year), data: monthlyMetricValues(year, metric),
+      borderColor: COLORS[i % COLORS.length], backgroundColor: COLORS[i % COLORS.length],
+      borderWidth: 2.5, fill: false, tension: 0, pointRadius: 4, pointHoverRadius: 6, spanGaps: true, topLabel: false
+    }))},
+    options: chartOptions({
       interaction: { mode: 'index', intersect: false },
       plugins: {
-        legend: { display: true, position: 'bottom', labels: { boxWidth: 10, boxHeight: 10, usePointStyle: true, pointStyle: 'circle', font: { size: 11 }, color: dark ? '#94a3b8' : '#64748b' } },
-        tooltip: { callbacks: { label: function(c){
-          if (c.raw === null) return null;
-          if (yearCmpMetric === 'count') return ' ' + c.dataset.label + ': ' + c.raw + ' Ladevorgänge';
-          if (yearCmpMetric === 'cost') return ' ' + c.dataset.label + ': CHF ' + chf(c.raw, 0);
-          return ' ' + c.dataset.label + ': ' + fmtNum(c.raw, 1) + ' kWh';
+        legend: { display: true, position: 'bottom', labels: { boxWidth: 10, boxHeight: 10, usePointStyle: true,
+          pointStyle: 'circle', font: { size: 11 }, color: isDarkMode() ? '#94a3b8' : '#64748b' } },
+        tooltip: { callbacks: { label: ctx => {
+          if (ctx.raw === null) return null;
+          if (metric === 'count') return ' ' + ctx.dataset.label + ': ' + ctx.raw + ' Ladevorgänge';
+          if (metric === 'cost') return ' ' + ctx.dataset.label + ': CHF ' + formatChf(ctx.raw, 0);
+          return ' ' + ctx.dataset.label + ': ' + formatNumber(ctx.raw, 1) + ' kWh';
         } } }
       },
-      scales: { x: { grid: { display: false }, ticks: { font: { size: 10 }, color: '#94a3b8' } },
-        y: { grid: { color: gridCol }, beginAtZero: true, ticks: { font: { size: 10 }, color: '#94a3b8', callback: function(v){
-          return yearCmpMetric === 'cost' ? 'CHF ' + v : (yearCmpMetric === 'kwh' ? v + ' kWh' : v);
-        } } } }
-    }
+      scales: { x: categoryAxis(), y: valueAxis(value =>
+        metric === 'cost' ? 'CHF ' + value : (metric === 'kwh' ? value + ' kWh' : value)) }
+    })
   });
 }
 
-// ── Günstigster Ladezeitpunkt ───────────────────────────────────────
-function renderInsights(data) {
-  var row = document.getElementById('insightRow');
-  var mitKwh = data.filter(function(r){ return r.kwh > 0; });
-  if (mitKwh.length < 5) { row.style.display = 'none'; return; }
-  var gesamtKwh = mitKwh.reduce(function(s,r){ return s + r.kwh; }, 0);
-  var gesamtKosten = mitKwh.reduce(function(s,r){ return s + r.total; }, 0);
-  var schnitt = gesamtKwh > 0 ? gesamtKosten / gesamtKwh : 0;
-  if (schnitt <= 0) { row.style.display = 'none'; return; }
+// ═══ Rendern: Tabelle ══════════════════════════════════════════════
 
-  function besteGruppe(keyFn, minAnzahl) {
-    var gruppen = {};
-    mitKwh.forEach(function(r){
-      var k = keyFn(r);
-      if (!gruppen[k]) gruppen[k] = { kwh: 0, cost: 0, n: 0 };
-      gruppen[k].kwh += r.kwh; gruppen[k].cost += r.total; gruppen[k].n++;
-    });
-    var kandidaten = Object.entries(gruppen)
-      .filter(function(e){ return e[1].n >= minAnzahl && e[1].kwh > 0; })
-      .map(function(e){ return { key: e[0], preis: e[1].cost / e[1].kwh, n: e[1].n }; });
-    if (kandidaten.length < 2) return null;
-    return kandidaten.sort(function(a,b){ return a.preis - b.preis; })[0];
-  }
-
-  var ZEITBLOECKE = [
-    { von: 0,  bis: 5,  name: 'nachts' },
-    { von: 6,  bis: 11, name: 'morgens' },
-    { von: 12, bis: 17, name: 'nachmittags' },
-    { von: 18, bis: 23, name: 'abends' }
-  ];
-  function zeitblock(r) {
-    for (var i = 0; i < ZEITBLOECKE.length; i++) {
-      if (r.hour >= ZEITBLOECKE[i].von && r.hour <= ZEITBLOECKE[i].bis) return ZEITBLOECKE[i].name;
-    }
-    return 'nachts';
-  }
-
-  var eintraege = [];
-  var tag = besteGruppe(function(r){ return WEEKDAYS_LONG[r.dayIdx]; }, 3);
-  if (tag) eintraege.push({ text: 'Am günstigsten lädst du', stark: tag.key.toLowerCase() + 's', preis: tag.preis });
-  var zeit = besteGruppe(zeitblock, 3);
-  if (zeit) eintraege.push({ text: 'Günstigste Tageszeit', stark: zeit.key, preis: zeit.preis });
-  var ort = besteGruppe(function(r){ return r.loc; }, 2);
-  if (ort) eintraege.push({ text: 'Günstigster Standort', stark: ort.key, preis: ort.preis });
-
-  if (!eintraege.length) { row.style.display = 'none'; return; }
-  row.style.display = '';
-  row.innerHTML = eintraege.map(function(e){
-    var diff = (e.preis - schnitt) / schnitt * 100;
-    var badge = Math.abs(diff) < 0.5 ? 'wie dein Schnitt'
-      : (diff < 0 ? '−' : '+') + Math.abs(diff).toFixed(0) + '% ggü. Schnitt';
-    return '<div class="insight-item">' + e.text + ' <span class="insight-strong">' + e.stark + '</span>' +
-      ' <span>CHF ' + chf(e.preis, 2) + '/kWh</span> <span class="insight-pct">' + badge + '</span></div>';
-  }).join('');
+function matchesSearch(charge, term) {
+  return formatDate(charge.date).toLowerCase().includes(term)
+    || WEEKDAYS_LONG[charge.dayIdx].toLowerCase().includes(term)
+    || charge.loc.toLowerCase().includes(term);
 }
 
-// ── Detailansicht einer einzelnen Ladung ────────────────────────────
-function openDetail(idx) {
-  var r = tableRendered[idx];
-  if (!r) return;
-  var data = getFilteredData();
-  var gesamtKwh = data.reduce(function(s,x){ return s + x.kwh; }, 0);
-  var gesamtKosten = data.reduce(function(s,x){ return s + x.total; }, 0);
-  var schnittPreis = gesamtKwh > 0 ? gesamtKosten / gesamtKwh : 0;
-  var schnittKosten = data.length ? gesamtKosten / data.length : 0;
-  var preis = r.kwh > 0 ? r.total / r.kwh : 0;
-  var zeit = r.date.toLocaleTimeString('de-CH', { hour: '2-digit', minute: '2-digit' });
-
-  document.getElementById('detailTitle').textContent = r.loc;
-  document.getElementById('detailSubtitle').textContent = WEEKDAYS_LONG[r.dayIdx] + ', ' + fmtDate(r.date) + ' um ' + zeit + ' Uhr';
-  document.getElementById('detailKwh').textContent = fmtNum(r.kwh, 1);
-  document.getElementById('detailCost').textContent = 'CHF ' + chf(r.total, 2);
-  document.getElementById('detailPrice').textContent = chf(preis, 2);
-
-  function vergleich(wert, referenz, referenzText) {
-    if (!referenz) return '–';
-    var diff = (wert - referenz) / referenz * 100;
-    var pfeil = diff > 0.5 ? '↑' : (diff < -0.5 ? '↓' : '→');
-    return pfeil + ' ' + Math.abs(diff).toFixed(0) + '%  (Ø ' + referenzText + ')';
+function sortValue(charge, column) {
+  switch (column) {
+    case 'loc':   return charge.loc;
+    case 'kwh':   return charge.kwh;
+    case 'cost':  return charge.total;
+    case 'price': return pricePerKwh(charge);
+    case 'day':   return charge.dayIdx;
+    case 'time':  return charge.date.getHours() * 60 + charge.date.getMinutes();
+    default:      return charge.date.getTime();
   }
-  var zeilen = [
-    ['Genauer Preis pro kWh', 'CHF ' + chf(preis, 3)],
-    ['Preis ggü. deinem Schnitt', vergleich(preis, schnittPreis, 'CHF ' + chf(schnittPreis, 2) + '/kWh')],
-    ['Kosten ggü. deinem Schnitt', vergleich(r.total, schnittKosten, 'CHF ' + chf(schnittKosten, 0))],
-    ['Monat', r.monthLabel]
+}
+
+function sortCharges(charges) {
+  return charges.slice().sort((a, b) => {
+    const left = sortValue(a, tableSortBy);
+    const right = sortValue(b, tableSortBy);
+    if (typeof left === 'string') return tableSortDir === 'asc' ? left.localeCompare(right) : right.localeCompare(left);
+    return tableSortDir === 'asc' ? left - right : right - left;
+  });
+}
+
+function updateSortArrows() {
+  document.querySelectorAll('thead th[data-sort]').forEach(th => {
+    const arrow = th.querySelector('.sort-arrow');
+    const active = th.dataset.sort === tableSortBy;
+    th.classList.toggle('sort-active', active);
+    arrow.textContent = active ? (tableSortDir === 'asc' ? '▲' : '▼') : '⇅';
+  });
+}
+
+function tableRowHtml(charge, index, monthOrder) {
+  const weekdayClass = charge.dayIdx < 5 ? 'blue' : 'orange';
+  const rowClass = monthOrder.indexOf(charge.monthKey) % 2 === 0 ? 'month-even' : 'month-odd';
+  return '<tr class="' + rowClass + '" data-idx="' + index + '" title="Für Details antippen">'
+    + '<td>' + formatDate(charge.date) + '</td>'
+    + '<td><span class="badge badge-green">' + charge.loc + '</span></td>'
+    + '<td>' + formatNumber(charge.kwh, 2) + '</td>'
+    + '<td>CHF ' + formatChf(charge.total) + '</td>'
+    + '<td>CHF ' + formatChf(pricePerKwh(charge), 2) + '</td>'
+    + '<td><span class="badge badge-' + weekdayClass + '">' + WEEKDAYS_LONG[charge.dayIdx] + '</span></td>'
+    + '<td>' + formatTime(charge.date) + '</td></tr>';
+}
+
+function renderTable(charges) {
+  const filtered = tableSearch ? charges.filter(c => matchesSearch(c, tableSearch)) : charges;
+  const sorted = sortCharges(filtered);
+  updateSortArrows();
+
+  if (!sorted.length) {
+    visibleTableRows = [];
+    setText('tableCount', '0 Treffer');
+    setHtml('tableBody', '<tr><td colspan="7"><div class="empty-state"><div class="empty-state-icon">🔍</div>Keine Treffer'
+      + (tableSearch ? ' für „' + tableSearch + '"' : ' in diesem Zeitraum') + '</div></td></tr>');
+    return;
+  }
+
+  // Nur die Standardansicht wird gekürzt; wer sucht oder sortiert, will alles sehen
+  const isDefaultView = tableSortBy === 'date' && tableSortDir === 'desc' && !tableSearch
+    && filterMonths !== 1 && filterMonths !== 3;
+  const rows = isDefaultView ? sorted.slice(0, 15) : sorted;
+  setText('tableCount', isDefaultView ? charges.length + ' Einträge total, erste 15 angezeigt' : sorted.length + ' Einträge');
+
+  const monthOrder = [];
+  rows.forEach(charge => { if (!monthOrder.includes(charge.monthKey)) monthOrder.push(charge.monthKey); });
+
+  visibleTableRows = rows;
+  setHtml('tableBody', rows.map((charge, index) => tableRowHtml(charge, index, monthOrder)).join(''));
+}
+
+// ═══ Detailansicht einer einzelnen Ladung ══════════════════════════
+
+// Abweichung vom Durchschnitt als Pfeil mit Prozentwert
+function formatDeviation(value, reference, referenceText) {
+  if (!reference) return '–';
+  const diff = (value - reference) / reference * 100;
+  const arrow = diff > 0.5 ? '↑' : (diff < -0.5 ? '↓' : '→');
+  return arrow + ' ' + Math.abs(diff).toFixed(0) + '%  (Ø ' + referenceText + ')';
+}
+
+function openDetail(index) {
+  const charge = visibleTableRows[index];
+  if (!charge) return;
+  const charges = getVisibleCharges();
+  const avgPrice = averagePricePerKwh(charges);
+  const avgCost = charges.length ? sumCost(charges) / charges.length : 0;
+  const price = pricePerKwh(charge);
+
+  setText('detailTitle', charge.loc);
+  setText('detailSubtitle', WEEKDAYS_LONG[charge.dayIdx] + ', ' + formatDate(charge.date) + ' um ' + formatTime(charge.date) + ' Uhr');
+  setText('detailKwh', formatNumber(charge.kwh, 1));
+  setText('detailCost', 'CHF ' + formatChf(charge.total, 2));
+  setText('detailPrice', formatChf(price, 2));
+
+  const lines = [
+    ['Genauer Preis pro kWh', 'CHF ' + formatChf(price, 3)],
+    ['Preis ggü. deinem Schnitt', formatDeviation(price, avgPrice, 'CHF ' + formatChf(avgPrice, 2) + '/kWh')],
+    ['Kosten ggü. deinem Schnitt', formatDeviation(charge.total, avgCost, 'CHF ' + formatChf(avgCost, 0))],
+    ['Monat', charge.monthLabel]
   ];
-  document.getElementById('detailRows').innerHTML = zeilen.map(function(z){
-    return '<div class="detail-line"><span class="detail-line-lbl">' + z[0] + '</span><span class="detail-line-val">' + z[1] + '</span></div>';
-  }).join('');
-  document.getElementById('detailOverlay').classList.add('open');
+  setHtml('detailRows', lines.map(line =>
+    '<div class="detail-line"><span class="detail-line-lbl">' + line[0] + '</span>'
+    + '<span class="detail-line-val">' + line[1] + '</span></div>').join(''));
+  el('detailOverlay').classList.add('open');
 }
 
 function closeDetail() {
-  document.getElementById('detailOverlay').classList.remove('open');
+  el('detailOverlay').classList.remove('open');
 }
 
-document.addEventListener('keydown', function(e) {
-  if (e.key === 'Escape') document.getElementById('detailOverlay').classList.remove('open');
-});
-
-async function loadData() {
-  try {
-    // 1. Fetch first sheet name
-    var metaResp = await fetch(
-      'https://sheets.googleapis.com/v4/spreadsheets/' + SHEET_ID + '?fields=sheets.properties.title',
-      { headers: { 'Authorization': 'Bearer ' + accessToken } }
-    );
-    if (metaResp.status === 401) { accessToken = null; document.getElementById('loadingOverlay').style.display = 'none'; document.getElementById('signinOverlay').style.display = 'flex'; return; }
-    if (!metaResp.ok) throw new Error('Sheets API Fehler ' + metaResp.status + ': ' + await metaResp.text());
-    var meta = await metaResp.json();
-    var sheetName = meta.sheets[0].properties.title;
-    // 2. Fetch values
-    var dataResp = await fetch(
-      'https://sheets.googleapis.com/v4/spreadsheets/' + SHEET_ID + '/values/' + encodeURIComponent(sheetName),
-      { headers: { 'Authorization': 'Bearer ' + accessToken } }
-    );
-    if (!dataResp.ok) throw new Error('Werte-Abruf fehlgeschlagen: ' + dataResp.status);
-    var json = await dataResp.json();
-    if (!json.values || json.values.length < 2) throw new Error('Keine Daten im Sheet gefunden.');
-    var headers = json.values[0];
-    var rows = json.values.slice(1).map(function(row) {
-      var obj = {};
-      headers.forEach(function(h, i) { obj[h.trim()] = (row[i] || '').trim(); });
-      return obj;
-    }).filter(function(r) { return Object.keys(r).length > 1; });
-    allData = parseRows(rows);
-    if (!allData.length) throw new Error('Keine gültigen Einträge gefunden. Zeilen im Sheet: ' + rows.length);
-    document.getElementById('statusBadge').style.display = 'flex';
-    document.getElementById('statusText').textContent = allData.length + ' Einträge';
-    renderYearButtons();
-    updateNav();
-    renderAll();
-    document.getElementById('loadingOverlay').style.display = 'none';
-  } catch(err) {
-    document.getElementById('loadingOverlay').style.display = 'none';
-    var card = document.getElementById('errorCard');
-    card.style.display = 'block';
-    card.innerHTML = '<strong>⚠️ Fehler beim Laden der Daten</strong><pre>' + err.message + '</pre>';
-  }
-}
+// ═══ Einstellungen ═════════════════════════════════════════════════
 
 function saveOdometer() {
-  var val = document.getElementById('odometerInput').value;
-  try { localStorage.setItem('tesla-odometer', val); } catch(_) {}
-  if (allData.length) renderKPIs(getFilteredData());
-}
-
-const REFRESH_ENDPOINT = 'https://script.google.com/macros/s/AKfycbzplDQKzviFvZkT-mb8xChF-9AN3Eu15mMC-et_JSFyhRHPCEw-2F7oYgW0ehwQGvJzJw/exec';
-const REFRESH_TOKEN_KEY = 'tesla-refresh-token';
-
-function getRefreshToken(force) {
-  var stored = null;
-  try { stored = localStorage.getItem(REFRESH_TOKEN_KEY); } catch(_) {}
-  if (stored && !force) return stored;
-  var entered = prompt(
-    force
-      ? 'Der gespeicherte Token wurde abgelehnt.\nBitte aktuellen Apps-Script-Token eingeben:'
-      : 'Bitte Apps-Script-Token eingeben\n(wird nur lokal in diesem Browser gespeichert):',
-    ''
-  );
-  if (!entered) return null;
-  entered = entered.trim();
-  if (!entered) return null;
-  try { localStorage.setItem(REFRESH_TOKEN_KEY, entered); } catch(_) {}
-  return entered;
-}
-
-// Erlaubt manuelles Zurücksetzen: Shift-Klick auf den Refresh-Button löscht den Token.
-function resetRefreshToken() {
-  try { localStorage.removeItem(REFRESH_TOKEN_KEY); } catch(_) {}
-}
-
-async function triggerRefresh(event) {
-  var btn = document.getElementById('refreshBtn');
-  // Shift-Klick: Token zurücksetzen statt Refresh auslösen
-  if (event && event.shiftKey) {
-    resetRefreshToken();
-    btn.textContent = '🗑️';
-    setTimeout(function(){ btn.textContent = '🔄'; }, 1500);
-    return;
+  try { localStorage.setItem(STORAGE_KEYS.odometer, el('odometerInput').value); } catch (_) {}
+  if (allCharges.length) {
+    renderKpiCards(getVisibleCharges());
+    renderSavingsCard(getVisibleCharges());
   }
-  var token = getRefreshToken(false);
-  if (!token) {
-    btn.textContent = '⚠️';
-    setTimeout(function(){ btn.textContent = '🔄'; }, 1500);
-    return;
-  }
-  btn.disabled = true;
-  btn.classList.add('spinning');
-  btn.textContent = '🔄';
-  var url = REFRESH_ENDPOINT + '?refresh=true&token=' + encodeURIComponent(token);
-  try {
-    var resp = await fetch(url);
-    var data = await resp.json();
-    btn.classList.remove('spinning');
-    if (data.status === 'success') {
-      btn.textContent = '✅';
-      await loadData();
-    } else if (data.status === 'unauthorized' || resp.status === 401 || resp.status === 403) {
-      // Token war ungültig – löschen und neu fragen
-      resetRefreshToken();
-      btn.textContent = '🔑';
-      var newToken = getRefreshToken(true);
-      btn.disabled = false;
-      btn.textContent = '🔄';
-      if (newToken) {
-        // direkt nochmal versuchen
-        setTimeout(function(){ triggerRefresh(); }, 200);
-        return;
-      }
-    } else {
-      btn.textContent = '❌';
-    }
-  } catch(err) {
-    btn.classList.remove('spinning');
-    btn.textContent = '❌';
-  }
-  setTimeout(function() {
-    btn.textContent = '🔄';
-    btn.disabled = false;
-  }, 2000);
 }
 
 function toggleTheme() {
-  var dark = document.body.classList.toggle('dark');
-  document.getElementById('themeBtn').textContent = dark ? '☀️' : '🌙';
-  try { localStorage.setItem('tesla-dash-theme', dark ? 'dark' : 'light'); } catch(_) {}
-  if (allData.length) renderAll();
+  const dark = document.body.classList.toggle('dark');
+  setText('themeBtn', dark ? '☀️' : '🌙');
+  try { localStorage.setItem(STORAGE_KEYS.theme, dark ? 'dark' : 'light'); } catch (_) {}
+  if (allCharges.length) renderAll();
 }
 
-// Restore saved odometer
-try {
-  var savedOdo = localStorage.getItem('tesla-odometer');
-  if (savedOdo) document.getElementById('odometerInput').value = savedOdo;
-} catch(_) {}
+function restoreSettings() {
+  try {
+    const odometer = localStorage.getItem(STORAGE_KEYS.odometer);
+    if (odometer) el('odometerInput').value = odometer;
+    if (localStorage.getItem(STORAGE_KEYS.theme) === 'dark') {
+      document.body.classList.add('dark');
+      setText('themeBtn', '☀️');
+    }
+  } catch (_) {}
+}
 
-// Restore saved theme preference
-try {
-  if (localStorage.getItem('tesla-dash-theme') === 'dark') {
-    document.body.classList.add('dark');
-    document.getElementById('themeBtn').textContent = '☀️';
+// ═══ Daten neu importieren (Apps Script) ═══════════════════════════
+
+// Der Token wird nie im Code hinterlegt, sondern einmalig abgefragt und lokal gespeichert
+function getRefreshToken(askAgain) {
+  let stored = null;
+  try { stored = localStorage.getItem(STORAGE_KEYS.refreshToken); } catch (_) {}
+  if (stored && !askAgain) return stored;
+
+  const entered = (prompt(askAgain
+    ? 'Der gespeicherte Token wurde abgelehnt.\nBitte aktuellen Apps-Script-Token eingeben:'
+    : 'Bitte Apps-Script-Token eingeben\n(wird nur lokal in diesem Browser gespeichert):', '') || '').trim();
+  if (!entered) return null;
+  try { localStorage.setItem(STORAGE_KEYS.refreshToken, entered); } catch (_) {}
+  return entered;
+}
+
+function forgetRefreshToken() {
+  try { localStorage.removeItem(STORAGE_KEYS.refreshToken); } catch (_) {}
+}
+
+function flashRefreshButton(symbol, resetDelay) {
+  const button = el('refreshBtn');
+  button.textContent = symbol;
+  setTimeout(() => { button.textContent = '🔄'; button.disabled = false; }, resetDelay);
+}
+
+async function triggerRefresh(event) {
+  const button = el('refreshBtn');
+  // Shift-Klick setzt den gespeicherten Token zurück, statt einen Import auszulösen
+  if (event && event.shiftKey) { forgetRefreshToken(); flashRefreshButton('🗑️', 1500); return; }
+
+  const token = getRefreshToken(false);
+  if (!token) { flashRefreshButton('⚠️', 1500); return; }
+
+  button.disabled = true;
+  button.classList.add('spinning');
+  button.textContent = '🔄';
+  try {
+    const response = await fetch(REFRESH_ENDPOINT + '?refresh=true&token=' + encodeURIComponent(token));
+    const result = await response.json();
+    button.classList.remove('spinning');
+
+    if (result.status === 'success') {
+      button.textContent = '✅';
+      await loadData();
+    } else if (result.status === 'unauthorized' || response.status === 401 || response.status === 403) {
+      forgetRefreshToken();
+      button.textContent = '🔑';
+      const newToken = getRefreshToken(true);
+      button.disabled = false;
+      button.textContent = '🔄';
+      if (newToken) { setTimeout(triggerRefresh, 200); return; }
+    } else {
+      button.textContent = '❌';
+    }
+  } catch (err) {
+    button.classList.remove('spinning');
+    button.textContent = '❌';
   }
-} catch(_) {}
+  flashRefreshButton(button.textContent, 2000);
+}
 
-// Tabellen-Sortierung: Klick-Handler für Header
-document.querySelectorAll('thead th[data-sort]').forEach(function(th) {
-  th.addEventListener('click', function() {
-    var col = th.dataset.sort;
-    if (tableSortBy === col) {
+// ═══ Start ═════════════════════════════════════════════════════════
+
+document.querySelectorAll('thead th[data-sort]').forEach(th => {
+  th.addEventListener('click', () => {
+    const column = th.dataset.sort;
+    if (tableSortBy === column) {
       tableSortDir = tableSortDir === 'asc' ? 'desc' : 'asc';
     } else {
-      tableSortBy = col;
-      tableSortDir = (col === 'date' || col === 'kwh' || col === 'cost' || col === 'price') ? 'desc' : 'asc';
+      tableSortBy = column;
+      tableSortDir = ['date','kwh','cost','price'].includes(column) ? 'desc' : 'asc';
     }
-    if (allData.length) renderTable(getFilteredData());
+    if (allCharges.length) renderTable(getVisibleCharges());
   });
 });
 
-// Tabellenzeile antippen öffnet die Detailansicht
-document.getElementById('tableBody').addEventListener('click', function(e) {
-  var tr = e.target.closest('tr[data-idx]');
-  if (tr) openDetail(parseInt(tr.dataset.idx));
+el('tableSearch').addEventListener('input', event => {
+  tableSearch = event.target.value.toLowerCase().trim();
+  if (allCharges.length) renderTable(getVisibleCharges());
 });
 
-// Tabellen-Suche
-document.getElementById('tableSearch').addEventListener('input', function(e) {
-  tableSearch = e.target.value.toLowerCase().trim();
-  if (allData.length) renderTable(getFilteredData());
+el('tableBody').addEventListener('click', event => {
+  const row = event.target.closest('tr[data-idx]');
+  if (row) openDetail(parseInt(row.dataset.idx));
 });
 
-// Start Google Auth on page load
+document.addEventListener('keydown', event => {
+  if (event.key === 'Escape') closeDetail();
+});
+
+restoreSettings();
 initGoogleAuth();
 </script>
 </body>
