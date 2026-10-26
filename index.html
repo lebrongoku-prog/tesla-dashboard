@@ -522,7 +522,7 @@
   <div class="charts-row">
     <div class="chart-card"><div class="chart-header"><div class="chart-title-row"><div class="chart-title" id="countChartTitle">Ladevorgänge pro Monat</div><select id="countFilter" class="card-select" onchange="setMonthlyCountFilter(this.value)"><option value="">Alle</option></select></div><div class="chart-sub" id="chartCountSub"></div></div><div class="chart-wrap"><canvas id="chartCount"></canvas></div></div>
     <div class="chart-card"><div class="chart-header"><div class="chart-title">Kosten pro Monat</div><div class="chart-sub" id="chartCostSub"></div></div><div class="chart-wrap"><canvas id="chartCost"></canvas></div></div>
-    <div class="chart-card"><div class="chart-header"><div class="chart-title">Ø Preis pro Monat</div><div class="chart-sub" id="chartPriceSub"></div></div><div class="chart-wrap"><canvas id="chartPrice"></canvas></div></div>
+    <div class="chart-card"><div class="chart-header"><div class="chart-title" id="priceChartTitle">Durchschnittlicher Preis pro Ladung</div><div class="chart-sub" id="chartPriceSub"></div></div><div class="chart-wrap"><canvas id="chartPrice"></canvas></div></div>
   </div>
   <div class="charts-row" style="grid-template-columns:repeat(2,minmax(0,1fr))">
     <div class="chart-card"><div class="chart-header"><div class="chart-title">Ladevorgänge nach Wochentag</div><div class="chart-sub" id="chartDaySub"></div></div><div class="chart-wrap"><canvas id="chartDay"></canvas></div></div>
@@ -1008,7 +1008,7 @@ function setMonthlyCountFilter(value) {
   if (!charges.length) return;
   renderChargeCountChart(charges);
   renderCostChart(charges);
-  renderPriceChart(charges);
+  renderChargePriceChart(charges);
 }
 
 // Grenze, ab der die Navigation vor dem ersten Datensatz landen würde
@@ -1079,7 +1079,7 @@ function renderAll() {
     renderRecordCards(charges);
     renderCostChart(charges);
     renderChargeCountChart(charges);
-    renderPriceChart(charges);
+    renderChargePriceChart(charges);
     renderLocationChart(charges);
     renderWeekdayChart(charges);
     renderHeatmap(charges);
@@ -1566,54 +1566,64 @@ function renderCostPerMonthChart(charges) {
   });
 }
 
-// ═══ Rendern: Ø Preis pro kWh ══════════════════════════════════════
+// ═══ Rendern: Durchschnittlicher Preis pro Ladung ═════════════════
 
-function renderPriceChart(charges) {
+function renderChargePriceChart(charges) {
   destroyChart('price');
   if (filterMonths === 1) renderPricePerChargeChart(charges);
-  else renderPricePerMonthChart(charges);
+  else renderAvgPricePerChargeByMonthChart(charges);
 }
 
-function priceLineOptions(tooltipLabel) {
+function chargePriceLineOptions(tooltip) {
   return chartOptions({
-    plugins: { legend: { display: false }, tooltip: tooltipLabel },
-    scales: { x: categoryAxis(), y: valueAxis(value => value.toFixed(2) + ' CHF/kWh', { beginAtZero: false }) }
+    plugins: { legend: { display: false }, tooltip: tooltip },
+    scales: { x: categoryAxis(), y: valueAxis(value => 'CHF ' + value, { beginAtZero: false }) }
   });
 }
 
+// Gestrichelte Linie für den Schnitt des ganzen Zeitraums – entspricht dem Wert in der Kosten-Kachel
+function chargePriceAverageDataset(value, pointCount, dimmed) {
+  return { data: new Array(pointCount).fill(value),
+    borderColor: dimmed ? 'rgba(168,85,247,0.3)' : 'rgba(168,85,247,0.45)', borderWidth: 2,
+    borderDash: [5, 4], pointRadius: 0, fill: false, tension: 0, order: 1 };
+}
+
+// Monatsansicht: jede einzelne Ladung mit ihrem Preis
 function renderPricePerChargeChart(charges) {
   const sessions = charges.slice().sort((a, b) => a.date - b.date);
-  const prices = sessions.map(c => roundTo(pricePerKwh(c), 3));
-  const avgPrice = roundTo(average(prices.filter(p => p > 0)), 3);
+  const prices = sessions.map(c => roundTo(c.total, 2));
+  const avgPrice = roundTo(sumCost(sessions) / sessions.length, 2);
 
+  setText('priceChartTitle', 'Preis pro Ladung');
   setHtml('chartPriceSub', '<span style="color:' + CHART_COLORS.price + '">' + sessions.length
-    + ' Ladevorgänge · Ø ' + formatChf(avgPrice, 2) + ' CHF/kWh</span>');
+    + ' Ladevorgänge · Ø CHF ' + formatChf(avgPrice) + ' / Ladung</span>');
 
   charts.price = new Chart(el('chartPrice').getContext('2d'), {
     type: 'line',
     data: { labels: sessions.map(c => formatDayMonth(c.date)), datasets: [
       { data: prices, borderColor: CHART_COLORS.price, backgroundColor: 'transparent', borderWidth: 2.5,
         fill: false, tension: 0, pointBackgroundColor: CHART_COLORS.price, pointRadius: 5, pointHoverRadius: 7, order: 2 },
-      { data: new Array(prices.length).fill(avgPrice), borderColor: 'rgba(168,85,247,0.45)', borderWidth: 2,
-        borderDash: [5, 4], pointRadius: 0, fill: false, tension: 0, order: 1 }
+      chargePriceAverageDataset(avgPrice, prices.length, false)
     ]},
-    options: priceLineOptions({ displayColors: false, callbacks: { label: ctx => {
-      if (ctx.datasetIndex !== 0) return ' Ø CHF ' + formatChf(ctx.raw, 3) + ' / kWh';
+    options: chargePriceLineOptions({ displayColors: false, callbacks: { label: ctx => {
+      if (ctx.datasetIndex !== 0) return ' Ø CHF ' + formatChf(ctx.raw) + ' / Ladung';
       const session = sessions[ctx.dataIndex];
-      return [' CHF ' + formatChf(ctx.raw, 3) + ' / kWh', ' ' + session.loc, ' ' + formatTime(session.date) + ' Uhr'];
+      return [' CHF ' + formatChf(ctx.raw), ' ' + session.loc, ' ' + formatTime(session.date) + ' Uhr'];
     } } })
   });
 }
 
-function renderPricePerMonthChart(charges) {
+// Pro Monat: was eine Ladung dort im Schnitt gekostet hat
+function renderAvgPricePerChargeByMonthChart(charges) {
   const months = groupByMonth(charges);
-  const prices = months.map(m => m.kwh > 0 ? roundTo(m.cost / m.kwh, 3) : 0);
-  const avgPrice = roundTo(average(prices.filter(p => p > 0)), 3);
+  const prices = months.map(m => roundTo(m.cost / m.count, 2));
+  const avgPrice = roundTo(sumCost(charges) / charges.length, 2);
   const highlighted = months.map(isMonthHighlighted);
   const dimmed = monthlyCountFilter !== null;
 
-  setHtml('chartPriceSub', '<span style="color:' + CHART_COLORS.price + '">Ø ' + formatChf(avgPrice, 2)
-    + ' CHF/kWh im Zeitraum' + countFilterSuffix() + '</span>');
+  setText('priceChartTitle', 'Durchschnittlicher Preis pro Ladung');
+  setHtml('chartPriceSub', '<span style="color:' + CHART_COLORS.price + '">Ø CHF ' + formatChf(avgPrice)
+    + ' / Ladung im Zeitraum' + countFilterSuffix() + '</span>');
 
   charts.price = new Chart(el('chartPrice').getContext('2d'), {
     type: 'line',
@@ -1623,12 +1633,13 @@ function renderPricePerMonthChart(charges) {
         pointBackgroundColor: highlighted.map(on => on ? CHART_COLORS.price : (isDarkMode() ? '#334155' : '#cbd5e1')),
         pointRadius: highlighted.map(on => on ? 5 : 2),
         pointHoverRadius: highlighted.map(on => on ? 7 : 3), order: 2 },
-      { data: new Array(prices.length).fill(avgPrice),
-        borderColor: dimmed ? 'rgba(168,85,247,0.3)' : 'rgba(168,85,247,0.45)', borderWidth: 2,
-        borderDash: [5, 4], pointRadius: 0, fill: false, tension: 0, order: 1 }
+      chargePriceAverageDataset(avgPrice, prices.length, dimmed)
     ]},
-    options: priceLineOptions({ callbacks: { label: ctx =>
-      (ctx.datasetIndex === 0 ? ' CHF ' : ' Ø CHF ') + formatChf(ctx.raw, 3) + ' / kWh' } })
+    options: chargePriceLineOptions({ callbacks: { label: ctx => {
+      if (ctx.datasetIndex !== 0) return ' Ø CHF ' + formatChf(ctx.raw) + ' / Ladung';
+      const month = months[ctx.dataIndex];
+      return [' CHF ' + formatChf(ctx.raw) + '  Ø / Ladung', ' ' + month.count + (month.count === 1 ? ' Ladung' : ' Ladungen')];
+    } } })
   });
 }
 

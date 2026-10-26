@@ -78,7 +78,7 @@ Filter (filterMonths / filterYear / periodOffset / monthlyCountFilter)
 getVisibleCharges()
     ↓
 renderAll() → renderKpiCards, renderSavingsCard, renderRecordCards,
-              renderCostChart, renderChargeCountChart, renderPriceChart,
+              renderCostChart, renderChargeCountChart, renderChargePriceChart,
               renderLocationChart, renderWeekdayChart, renderHeatmap,
               renderPriceInsights, renderYearGrid,
               renderYearComparisonChart, renderTable
@@ -120,7 +120,7 @@ Spalten aus dem Sheet: `ChargeStartDateTime`, `SiteLocationName`, `QuantityBase`
 
 **Chart-Bausteine:** `categoryAxis(fontSize, color)`, `valueAxis(formatTick, extra)`, `countAxis()`, `chartOptions(extra)`, `averageLineDataset(...)`, `highlightColors(...)`, `isDarkMode()`, `chartGridColor()`, `destroyChart(id)`. Diese ersetzen die früher in jedem Diagramm kopierten Achsen- und Farbdefinitionen.
 
-**Rendern:** `renderTrendBadge(elId, current, previous, downIsGood)`, `clearPeriodSections()`. Die drei Diagramme mit Doppelrolle sind aufgeteilt: `renderChargeCountChart` → `renderMonthCalendar` / `renderChargeCountBars`; `renderCostChart` → `renderCostPerChargeChart` / `renderCostPerMonthChart` (+ `buildCostRowsWithForecast` für die Hochrechnung); `renderPriceChart` → `renderPricePerChargeChart` / `renderPricePerMonthChart`.
+**Rendern:** `renderTrendBadge(elId, current, previous, downIsGood)`, `clearPeriodSections()`. Die drei Diagramme mit Doppelrolle sind aufgeteilt: `renderChargeCountChart` → `renderMonthCalendar` / `renderChargeCountBars`; `renderCostChart` → `renderCostPerChargeChart` / `renderCostPerMonthChart` (+ `buildCostRowsWithForecast` für die Hochrechnung); `renderChargePriceChart` → `renderPricePerChargeChart` (1M: jede Ladung mit ihrem Preis) / `renderAvgPricePerChargeByMonthChart` (Ø CHF pro Ladung je Monat; Ø-Linie = Gesamtkosten ÷ Anzahl Ladungen, identisch mit dem Wert in der Kosten-Kachel). Das frühere Diagramm „Ø Preis pro Monat“ (CHF/kWh) wurde am 26.10.2026 auf Leonards Wunsch dadurch ersetzt.
 
 **Auth:** `initGoogleAuth` → `consumeTokenFromUrl` / `restoreTokenFromSession` → `startDataLoad`; `signIn`. OAuth Implicit Flow, Token in `sessionStorage`.
 
@@ -137,7 +137,7 @@ Spalten aus dem Sheet: `ChargeStartDateTime`, `SiteLocationName`, `QuantityBase`
 - **Sprache:** Alle User-facing Strings auf Deutsch (Schweizerdeutsch), z.B. „Ladevorgänge", „Ø Preis / kWh", „CHF".
 - **Zahlen:** `.toLocaleString('de-CH')`, CHF als Präfix (nicht Suffix), Tausender-Trenner `'` (kommt aus de-CH automatisch).
 - **Farben:**
-  - Primär-Blau `#3b82f6`, Grün `#22c55e`, Lila `#a855f7` (Ø Preis/kWh — **nicht** Grün, war korrigiert), Orange `#f97316`, Cyan `#06b6d4`.
+  - Primär-Blau `#3b82f6`, Grün `#22c55e`, Lila `#a855f7` (Ø Preis/kWh-Kachel und Diagramm „Durchschnittlicher Preis pro Ladung“ — **nicht** Grün, war korrigiert), Orange `#f97316`, Cyan `#06b6d4`.
   - Gradient-Header: `#0C4A6E → #0EA5E9`.
   - **Flächen-, Text- und Linienfarben stehen als CSS-Variablen in `:root`** (`--surface`, `--surface-sunken`, `--btn-bg`, `--field-bg`, `--border`, `--divider`, `--text-strong`, `--text-body`, `--text-control`, `--text-muted`, `--text-label`, `--row-*`, `--shadow-card`, `--overlay-bg`). Der Dunkelmodus überschreibt in `body.dark` **nur diese Variablen** — neue Bausteine deshalb mit Variablen statt Hex-Werten gestalten, dann stimmt der Dunkelmodus automatisch.
   - Graue Beschriftungen laufen **alle** über `--text-label` (hell `#94a3b8`, dunkel `#64748b`). Das frühere Sonder-Token `--text-label-fixed` ist entfallen — es gibt keine Beschriftung mehr, die den Dunkelmodus auslässt.
