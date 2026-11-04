@@ -522,7 +522,7 @@
   <div class="charts-row">
     <div class="chart-card"><div class="chart-header"><div class="chart-title-row"><div class="chart-title" id="countChartTitle">Ladevorgänge pro Monat</div><select id="countFilter" class="card-select" onchange="setMonthlyCountFilter(this.value)"><option value="">Alle</option></select></div><div class="chart-sub" id="chartCountSub"></div></div><div class="chart-wrap"><canvas id="chartCount"></canvas></div></div>
     <div class="chart-card"><div class="chart-header"><div class="chart-title">Kosten pro Monat</div><div class="chart-sub" id="chartCostSub"></div></div><div class="chart-wrap"><canvas id="chartCost"></canvas></div></div>
-    <div class="chart-card"><div class="chart-header"><div class="chart-title">Durchschnittliche Kosten pro Ladung</div><div class="chart-sub" id="chartCostPerChargeSub"></div></div><div class="chart-wrap"><canvas id="chartCostPerCharge"></canvas></div></div>
+    <div class="chart-card"><div class="chart-header"><div class="chart-title">Kosten pro Ladung</div><div class="chart-sub" id="chartCostPerChargeSub"></div></div><div class="chart-wrap"><canvas id="chartCostPerCharge"></canvas></div></div>
   </div>
   <div class="charts-row" style="grid-template-columns:repeat(2,minmax(0,1fr))">
     <div class="chart-card"><div class="chart-header"><div class="chart-title">Ladevorgänge nach Wochentag</div><div class="chart-sub" id="chartDaySub"></div></div><div class="chart-wrap"><canvas id="chartDay"></canvas></div></div>
@@ -1008,7 +1008,7 @@ function setMonthlyCountFilter(value) {
   if (!charges.length) return;
   renderChargeCountChart(charges);
   renderCostChart(charges);
-  renderAvgCostPerChargeChart(charges);
+  renderCostPerChargeTrendChart(charges);
 }
 
 // Grenze, ab der die Navigation vor dem ersten Datensatz landen würde
@@ -1079,7 +1079,7 @@ function renderAll() {
     renderRecordCards(charges);
     renderCostChart(charges);
     renderChargeCountChart(charges);
-    renderAvgCostPerChargeChart(charges);
+    renderCostPerChargeTrendChart(charges);
     renderLocationChart(charges);
     renderWeekdayChart(charges);
     renderHeatmap(charges);
@@ -1566,45 +1566,69 @@ function renderCostPerMonthChart(charges) {
   });
 }
 
-// ═══ Rendern: Durchschnittliche Kosten pro Ladung ════════════════
+// ═══ Rendern: Kosten pro Ladung ══════════════════════════════════
 
-// Jede Ladung im Zeitraum mit ihren Kosten, dazu der Schnitt als gestrichelte Linie
-function renderAvgCostPerChargeChart(charges) {
+// Jede Ladung im Zeitraum mit ihren Kosten, dazu der Schnitt als gestrichelte Linie.
+// Die X-Achse entspricht der von „Kosten pro Monat“: bei 1M ein Datum pro Ladung, sonst Monate.
+function renderCostPerChargeTrendChart(charges) {
   destroyChart('costPerCharge');
   const sessions = charges.slice().sort((a, b) => a.date - b.date);
   const costs = sessions.map(c => roundTo(c.total, 2));
   const avgCost = roundTo(sumCost(sessions) / sessions.length, 2);
-  const spansYears = sessions[0].year !== sessions[sessions.length - 1].year;
+  const months = groupByMonth(charges);
+  const byMonth = filterMonths !== 1;
 
   // Anzahl-Filter: Ladungen aus nicht passenden Monaten ausgrauen
-  const monthCounts = {};
-  groupByMonth(charges).forEach(m => { monthCounts[m.key] = m.count; });
-  const highlighted = sessions.map(c => isMonthHighlighted({ count: monthCounts[c.monthKey] }));
+  const monthIndex = {};
+  months.forEach((m, i) => { monthIndex[m.key] = i; });
+  const highlighted = sessions.map(c => isMonthHighlighted(months[monthIndex[c.monthKey]]));
   const dimmed = monthlyCountFilter !== null;
   const pointSize = sessions.length <= 40 ? 4 : sessions.length <= 120 ? 2.5 : 1.5;
+
+  // Monatsansicht: Ladung innerhalb ihrer Monatsspalte nach Tag verteilen (Spalte i reicht von i-0.5 bis i+0.5)
+  const xPosition = (c, i) => {
+    if (!byMonth) return i;
+    const monthStart = new Date(c.date.getFullYear(), c.date.getMonth(), 1);
+    const monthEnd = new Date(c.date.getFullYear(), c.date.getMonth() + 1, 1);
+    return monthIndex[c.monthKey] - 0.5 + (c.date - monthStart) / (monthEnd - monthStart);
+  };
+  const labels = byMonth ? months.map(m => m.label) : sessions.map(c => formatDayMonth(c.date));
 
   setHtml('chartCostPerChargeSub', '<span style="color:' + CHART_COLORS.cost + '">' + sessions.length
     + ' Ladevorgänge · Ø CHF ' + formatChf(avgCost) + ' / Ladung' + countFilterSuffix() + '</span>');
 
   charts.costPerCharge = new Chart(el('chartCostPerCharge').getContext('2d'), {
     type: 'line',
-    data: { labels: sessions.map(c => spansYears ? formatDate(c.date) : formatDayMonth(c.date)), datasets: [
-      { data: costs, borderColor: dimmed ? 'rgba(34,197,94,0.25)' : CHART_COLORS.cost, backgroundColor: 'transparent',
+    data: { datasets: [
+      { data: sessions.map((c, i) => ({ x: xPosition(c, i), y: costs[i] })),
+        borderColor: dimmed ? 'rgba(34,197,94,0.25)' : CHART_COLORS.cost, backgroundColor: 'transparent',
         borderWidth: sessions.length <= 120 ? 2 : 1.5, fill: false, tension: 0,
         pointBackgroundColor: highlighted.map(on => on ? CHART_COLORS.cost : (isDarkMode() ? '#334155' : '#cbd5e1')),
         pointBorderWidth: 0,
         pointRadius: highlighted.map(on => on ? pointSize : 1.5),
         pointHoverRadius: pointSize + 3, order: 2 },
-      averageLineDataset(avgCost, costs.length, 'rgba(34,197,94,0.45)')
+      Object.assign(averageLineDataset(avgCost, 2, 'rgba(34,197,94,0.45)'),
+        { data: [{ x: -0.5, y: avgCost }, { x: labels.length - 0.5, y: avgCost }] })
     ]},
     options: chartOptions({
       interaction: { mode: 'nearest', axis: 'x', intersect: false },
-      plugins: { legend: { display: false }, tooltip: { displayColors: false, callbacks: { label: ctx => {
-        if (ctx.datasetIndex !== 0) return ' Ø CHF ' + formatChf(ctx.raw) + ' / Ladung';
-        const session = sessions[ctx.dataIndex];
-        return [' CHF ' + formatChf(ctx.raw), ' ' + session.loc, ' ' + formatTime(session.date) + ' Uhr'];
-      } } } },
-      scales: { x: categoryAxis(), y: valueAxis(value => 'CHF ' + value) }
+      plugins: { legend: { display: false }, tooltip: { displayColors: false,
+        filter: item => item.datasetIndex === 0,
+        callbacks: {
+          title: items => items.length ? formatDate(sessions[items[0].dataIndex].date) : '',
+          label: ctx => {
+            const session = sessions[ctx.dataIndex];
+            return [' CHF ' + formatChf(ctx.parsed.y), ' ' + session.loc, ' ' + formatTime(session.date) + ' Uhr'];
+          }
+        } } },
+      scales: {
+        x: Object.assign(categoryAxis(), {
+          type: 'linear', min: -0.5, max: labels.length - 0.5,
+          afterBuildTicks: axis => { axis.ticks = labels.map((label, i) => ({ value: i })); },
+          ticks: Object.assign(categoryAxis().ticks, { callback: value => labels[value] })
+        }),
+        y: valueAxis(value => 'CHF ' + value)
+      }
     })
   });
 }
