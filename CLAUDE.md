@@ -120,7 +120,7 @@ Spalten aus dem Sheet: `ChargeStartDateTime`, `SiteLocationName`, `QuantityBase`
 
 **Chart-Bausteine:** `categoryAxis(fontSize, color)`, `valueAxis(formatTick, extra)`, `countAxis()`, `chartOptions(extra)`, `averageLineDataset(...)`, `highlightColors(...)`, `isDarkMode()`, `chartGridColor()`, `destroyChart(id)`. Diese ersetzen die früher in jedem Diagramm kopierten Achsen- und Farbdefinitionen.
 
-**Rendern:** `renderTrendBadge(elId, current, previous, downIsGood)`, `clearPeriodSections()`. Die zwei Diagramme mit Doppelrolle sind aufgeteilt: `renderChargeCountChart` → `renderMonthCalendar` / `renderChargeCountBars`; `renderCostChart` → `renderCostPerChargeChart` / `renderCostPerMonthChart` (+ `buildCostRowsWithForecast` für die Hochrechnung); `renderCostPerChargeTrendChart` („Kosten pro Ladung“, grün wie „Kosten pro Monat“) zeigt in jedem Zeitfenster jede einzelne Ladung mit ihren Kosten als Linie plus gestrichelte Ø-Linie (= Gesamtkosten ÷ Anzahl Ladungen, identisch mit dem Wert in der Kosten-Kachel). Die X-Achse hat dieselben Werte wie „Kosten pro Monat“ / „Ladevorgänge pro Monat“: bei 1M ein Datum pro Ladung, sonst die Monate aus `groupByMonth` (lineare Achse, jede Ladung nach Tag innerhalb ihrer Monatsspalte platziert; die Hochrechnungsmonate von „Kosten pro Monat“ kommen bewusst nicht vor); beim Anzahl-Filter werden Ladungen aus nicht passenden Monaten ausgegraut. Es ersetzt am 04.11.2026 auf Leonards Wunsch „Durchschnittlicher Preis pro Ladung“ (lila, Monatswerte), das seinerseits am 26.10.2026 „Ø Preis pro Monat“ (CHF/kWh) ersetzt hatte.
+**Rendern:** `renderTrendBadge(elId, current, previous, downIsGood)`, `clearPeriodSections()`. Die zwei Diagramme mit Doppelrolle sind aufgeteilt: `renderChargeCountChart` → `renderMonthCalendar` / `renderChargeCountBars`; `renderCostChart` → `renderCostPerChargeChart` / `renderCostPerMonthChart` (+ `buildCostRowsWithForecast` für die Hochrechnung); `renderCostPerChargeTrendChart` („Kosten pro Ladung“, grün wie „Kosten pro Monat“) verhält sich wie die anderen Reihe-2-Diagramme: bei 1M jede Ladung mit ihren Kosten, sonst ein Punkt pro Monat (Ø Kosten einer Ladung im Monat, Monate aus `groupByMonth`, ohne die Hochrechnungsmonate von „Kosten pro Monat“). Gestrichelte Ø-Linie = Gesamtkosten ÷ Anzahl Ladungen, identisch mit dem Wert in der Kosten-Kachel; beim Anzahl-Filter werden nicht passende Monate ausgegraut. Es ersetzt am 04.11.2026 auf Leonards Wunsch „Durchschnittlicher Preis pro Ladung“ (lila, Monatswerte), das seinerseits am 26.10.2026 „Ø Preis pro Monat“ (CHF/kWh) ersetzt hatte.
 
 **Auth:** `initGoogleAuth` → `consumeTokenFromUrl` / `restoreTokenFromSession` → `startDataLoad`; `signIn`. OAuth Implicit Flow, Token in `sessionStorage`.
 
@@ -147,7 +147,7 @@ Spalten aus dem Sheet: `ChargeStartDateTime`, `SiteLocationName`, `QuantityBase`
 - **Tooltips:** Kein Gedankenstrich als Trennlinie. Beträge vertikal untereinander ausgerichtet.
 - **KPI-Zusatzinfos:** In derselben Zeile wie der Wert (via `.kpi-value-row`), NIE als separate Zeile oder eigene Kachel.
 - **Zeitfilter:** 1M/3M/6M/1J/Alle + dynamisch generierte Jahres-Buttons (aus `allData.year`).
-- **Bei 1M-Filter:** Die Reihe-2-Diagramme zeigen Einzelladevorgänge statt Monatswerte („Kosten pro Ladung“ zeigt Einzelladungen in jedem Zeitfenster). Ladevorgänge-Chart wird zum Kalender-Overlay.
+- **Bei 1M-Filter:** Die drei Reihe-2-Diagramme zeigen Einzelladevorgänge statt Monatswerte. Ladevorgänge-Chart wird zum Kalender-Overlay.
 
 ## Bekannte Gotchas / Stolpersteine
 
